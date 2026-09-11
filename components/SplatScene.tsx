@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three/webgpu";
 import { GaussianSplat } from "three/addons/objects/GaussianSplat.js";
 import { SPZLoader } from "three/addons/loaders/SPZLoader.js";
-import { useFlyControls, type FlyControls } from "@/lib/controls";
+import { createFlyControls, type FlyControls } from "@/lib/controls";
 import { HOTSPOTS, HOTSPOT_RADIUS, LOOK_AT, MARKER_SIZE, SCAN_ROTATION, SPAWN_POSITION, SPZ_URL } from "@/lib/scene.config";
 
-type Phase = "loading" | "ready" | "unsupported" | "error";
+type Phase = "loading" | "ready" | "unsupported" | "unavailable" | "error";
 
 export default function SplatScene() {
   const host = useRef<HTMLDivElement>(null);
@@ -17,7 +17,6 @@ export default function SplatScene() {
   const selectedRef = useRef<number | null>(null);
   const targetedRef = useRef<number | null>(null);
   const visitedRef = useRef<ReadonlySet<number>>(new Set());
-  const connectControls = useFlyControls();
   const [phase, setPhase] = useState<Phase>("loading");
   const [message, setMessage] = useState("Preparing WebGPU…");
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
@@ -30,12 +29,13 @@ export default function SplatScene() {
   const [hint, setHint] = useState(true);
   const [attempt, setAttempt] = useState(0);
   const [lockError, setLockError] = useState(false);
+  const controlsVisible = selected === null && (hint || lockError);
 
   useEffect(() => {
-    if (phase !== "ready" || !hint) return;
+    if (phase !== "ready" || !hint || selected !== null) return;
     const timer = window.setTimeout(() => setHint(false), 4000);
     return () => window.clearTimeout(timer);
-  }, [phase, hint]);
+  }, [phase, hint, selected]);
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -47,6 +47,8 @@ export default function SplatScene() {
     const container = host.current;
     if (!container) return;
     let active = true;
+    // Set by release(): a device that disappears because we tore it down is not a GPU fault.
+    let disposed = false;
     let renderer: THREE.WebGPURenderer | undefined;
     let splats: GaussianSplat | undefined;
     let geometry: THREE.BufferGeometry | undefined;
@@ -159,6 +161,8 @@ export default function SplatScene() {
       return false;
     };
     const release = () => {
+      if (disposed) return;
+      disposed = true;
       request.abort();
       removeVisibility?.();
       resizeObserver?.disconnect();
@@ -184,15 +188,22 @@ export default function SplatScene() {
       setTargeted(null);
       setResetting(false);
       setLockError(false);
+      setLocked(false);
       if (!navigator.gpu) {
+        release();
         setPhase("unsupported");
-        setMessage("This capture needs WebGPU. Try Safari 26+ or a recent Chromium browser, with hardware acceleration enabled. Use HTTPS or localhost.");
+        setMessage("This capture needs WebGPU. Use a supported browser on HTTPS or localhost, with graphics acceleration available.");
         return;
       }
       try {
         const adapter = await navigator.gpu.requestAdapter();
         if (!active) return;
-        if (!adapter) throw new Error("No WebGPU adapter is available. Enable hardware acceleration, then retry.");
+        if (!adapter) {
+          release();
+          setPhase("unavailable");
+          setMessage("WebGPU is present, but this browser could not access a graphics adapter. Check your browser's graphics settings or try another supported browser, then retry.");
+          return;
+        }
         const coarsePointer = matchMedia("(pointer: coarse)").matches;
         const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
         renderer = new THREE.WebGPURenderer({ antialias: false, alpha: false });
@@ -200,13 +211,28 @@ export default function SplatScene() {
         await renderer.init();
         if (!active) { renderer.dispose(); return; }
         if (!("isWebGPUBackend" in renderer.backend) || renderer.backend.isWebGPUBackend !== true) throw new Error("A WebGPU device could not start. Try a supported browser with hardware acceleration enabled.");
-        renderer.onDeviceLost = () => {
-          if (!active) return;
-          renderer?.setAnimationLoop(null);
-          fly?.dispose();
+        // A device can vanish for reasons three.js forwards (driver reset, GPU process crash) and
+        // for one it deliberately swallows: an explicit destroy(). Report every loss we did not
+        // cause, exactly once, so the canvas never freezes with no way back.
+        const reportDeviceLoss = () => {
+          if (!active || disposed) return;
+          // Loss ends this attempt, including pending loading and visibility callbacks.
+          release();
+          // dispose() removes the lock listener before it releases the mouse.
+          setLocked(false);
+          setResetting(false);
+          setSceneVisible(false);
           setPhase("error");
           setMessage("The GPU connection was interrupted. Reload the capture to continue.");
         };
+        renderer.onDeviceLost = reportDeviceLoss;
+        // three.js keeps the device out of its public backend surface, and its `lost` promise is the
+        // only loss signal that also covers a destroyed device, which WebGPUBackend returns early on.
+        const backend: unknown = renderer.backend;
+        const device: unknown = backend && typeof backend === "object" && "device" in backend ? backend.device : undefined;
+        if (device && typeof device === "object" && "lost" in device && device.lost instanceof Promise) {
+          void device.lost.then(reportDeviceLoss);
+        }
         const canvas = renderer.domElement;
         canvas.tabIndex = 0;
         canvas.setAttribute("aria-label", coarsePointer
@@ -226,18 +252,16 @@ export default function SplatScene() {
         resizeObserver = new ResizeObserver(resize);
         resizeObserver.observe(container!);
         resize();
-        let totalBytes: number | null = null;
-        try {
-          const metadata = await fetch(SPZ_URL, { method: "HEAD", signal: request.signal });
-          const length = Number(metadata.headers.get("content-length"));
-          if (metadata.ok && Number.isFinite(length) && length > 0) totalBytes = length;
-        } catch (error) {
-          if (request.signal.aborted) throw error;
-        }
         setMessage("Streaming the capture…");
-        setLoadProgress(totalBytes ? 0 : null);
         const response = await fetch(SPZ_URL, { signal: request.signal });
+        if (!active || disposed) return;
         if (!response.ok) throw new Error(`The scan could not load (HTTP ${response.status}). Check SPZ_URL and try again.`);
+        // Progress needs Content-Length from this same response. A separate HEAD probe adds a
+        // second request without adding information: when the transfer is compressed neither
+        // response declares a length, and the bar then stays indeterminate.
+        const declaredBytes = Number(response.headers.get("content-length"));
+        const totalBytes = Number.isFinite(declaredBytes) && declaredBytes > 0 ? declaredBytes : null;
+        setLoadProgress(totalBytes ? 0 : null);
         let buffer: ArrayBuffer;
         if (!response.body) {
           buffer = await response.arrayBuffer();
@@ -248,6 +272,7 @@ export default function SplatScene() {
           let reported = -1;
           while (true) {
             const { done, value } = await reader.read();
+            if (!active || disposed) return;
             if (done) break;
             chunks.push(value);
             received += value.byteLength;
@@ -261,16 +286,16 @@ export default function SplatScene() {
           for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
           buffer = bytes.buffer;
         }
-        if (!active) return;
+        if (!active || disposed) return;
         setLoadProgress(100);
         setMessage("Building the splats…");
         geometry = await new SPZLoader().parse(buffer);
-        if (!active) { geometry.dispose(); return; }
+        if (!active || disposed) { geometry.dispose(); return; }
         if (!geometry.getAttribute("position")?.count) throw new Error("This scan is empty. Choose a non-empty SPZ capture.");
         splats = new GaussianSplat(geometry);
         splats.rotation.set(...SCAN_ROTATION);
         scene.add(splats, ...markers);
-        fly = connectControls({
+        fly = createFlyControls({
           camera,
           canvas,
           onPick: pick,
@@ -288,7 +313,7 @@ export default function SplatScene() {
         controls.current = fly;
         let previousTime = performance.now();
         const animate = (time: number) => {
-          if (!active || !renderer) return;
+          if (!active || disposed || !renderer) return;
           const delta = Math.min((time - previousTime) / 1000, 0.05);
           previousTime = time;
           fly?.update(delta);
@@ -307,6 +332,7 @@ export default function SplatScene() {
         };
         renderer.setAnimationLoop(animate);
         const visibility = () => {
+          if (!active || disposed) return;
           if (document.hidden) renderer?.setAnimationLoop(null);
           else { previousTime = performance.now(); renderer?.setAnimationLoop(animate); }
         };
@@ -330,9 +356,14 @@ export default function SplatScene() {
         }
         setPhase("ready");
         setHint(true);
-        window.requestAnimationFrame(() => { if (active) setSceneVisible(true); });
+        window.requestAnimationFrame(() => {
+          if (!active || disposed) return;
+          setSceneVisible(true);
+          // A retry removes its focused button. Restore keyboard access without stealing focus.
+          if (attempt > 0 && document.activeElement === document.body) canvas.focus({ preventScroll: true });
+        });
       } catch (error) {
-        if (!active) return;
+        if (!active || disposed) return;
         release();
         setPhase("error");
         setMessage(error instanceof Error ? error.message : "The capture could not open. Please retry.");
@@ -344,7 +375,7 @@ export default function SplatScene() {
       release();
       if (process.env.NODE_ENV === "development") Reflect.deleteProperty(window, "__splatWalk");
     };
-  }, [attempt, connectControls]);
+  }, [attempt]);
 
   const closeCard = (focusTarget: HTMLElement | null = restoreFocusTarget.current) => {
     selectedRef.current = null;
@@ -401,8 +432,7 @@ export default function SplatScene() {
             controls.current?.reset();
             closeCard(host.current?.querySelector("canvas") ?? null);
           }}
-          aria-label="Reset camera"
-        >{resetting ? "Resetting" : "Reset"}</button>
+        >{resetting ? "Resetting…" : "Reset view"}</button>
         <button className="hud-button desktop-explore primary-action" onClick={() => {
           closeCard(host.current?.querySelector("canvas") ?? null);
           setLockError(false);
@@ -413,7 +443,7 @@ export default function SplatScene() {
 
     {phase !== "ready" && <div className="loading-shell absolute inset-0 grid place-items-center p-6">
       <section className="loading-card max-w-md rounded-xl bg-panel p-6" role="status" aria-live="polite">
-        <h2 className="mb-3 text-xl">{phase === "loading" ? "Loading the scan" : phase === "unsupported" ? "WebGPU required" : "Let's try that again"}</h2>
+        <h2 className="mb-3 text-xl">{phase === "loading" ? "Loading the scan" : phase === "unsupported" ? "WebGPU required" : phase === "unavailable" ? "WebGPU unavailable" : "Let's try that again"}</h2>
         <p className="text-base leading-relaxed text-subtle">{message}</p>
         {phase === "loading" && <div className="loading-progress-wrap mt-5">
           <div className={`loading-track ${loadProgress === null ? "loading-indeterminate" : ""}`} role="progressbar" aria-label="Scan loading progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={loadProgress ?? undefined}>
@@ -436,7 +466,7 @@ export default function SplatScene() {
         <span>{HOTSPOTS[targeted].label}</span>
         <small>{visited.has(targeted) ? "Found" : "Inspect"}</small>
       </div>}
-      {selected === null && <div className={`scan-hint hint pointer-events-none absolute mx-auto rounded-lg bg-panel text-center text-sm text-subtle ${hint || lockError ? "opacity-100" : "opacity-0"}`} aria-hidden={!hint && !lockError}>
+      {selected === null && <div id="scan-controls" className={`scan-hint hint pointer-events-none absolute mx-auto rounded-lg bg-panel text-center text-sm text-subtle ${hint || lockError ? "opacity-100" : "opacity-0"}`} aria-hidden={!hint && !lockError}>
         <p className="desktop-hint">Click to explore · WASD move · Q/E height<br />Mouse or arrows look · Esc releases · Aim at a ring for its label</p>
         <p className="touch-hint">Drag left to move · Drag right to look<br />Move near a ring to reveal it · Tap to discover</p>
         {lockError && <p className="mt-2 text-ink">Mouse capture was unavailable. Drag to look, or try Explore again.</p>}
@@ -476,7 +506,16 @@ export default function SplatScene() {
             {hotspot.label}
           </button>;
         })}
-        <button className="hud-button detail-button controls-button text-sm" onClick={() => setHint((value) => !value)} aria-label="Show controls">Controls</button>
+        <button
+          className="hud-button detail-button controls-button text-sm"
+          aria-expanded={controlsVisible}
+          aria-controls={selected === null ? "scan-controls" : undefined}
+          onClick={(event) => {
+            if (selected !== null) closeCard(event.currentTarget);
+            setLockError(false);
+            setHint(!controlsVisible);
+          }}
+        >Controls</button>
       </nav>
     </>}
     <footer className="scene-footer pointer-events-none absolute text-xs text-subtle">

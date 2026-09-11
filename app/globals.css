@@ -249,8 +249,9 @@ canvas { display: block; touch-action: none; }
   .scene-tagline { margin-top: .3rem; font-size: .7rem; }
   .scene-title-meta { gap: .55rem; }
   .discovery-progress { margin-top: .3rem; font-size: .64rem; }
-  .scene-actions .hud-button { min-height: 40px; padding: 6px 10px; }
-  .scan-hint { inset-inline: .75rem; top: 6.4rem; padding: .7rem .8rem; font-size: .76rem; }
+  .scene-actions { flex-direction: column; }
+  .scene-actions .hud-button { min-height: 40px; padding: 6px 10px; white-space: nowrap; }
+  .scan-hint { inset-inline: .75rem; top: 7.25rem; padding: .7rem .8rem; font-size: .76rem; }
   .detail-card { inset-inline: .75rem; bottom: 6.8rem; }
   .detail-nav { inset-inline: .75rem; bottom: 3.3rem; width: calc(100% - 1.5rem); max-width: none; gap: .05rem; }
   .detail-nav .hud-button { flex: 1 1 auto; min-width: 0; min-height: 38px; padding: 6px 5px; font-size: .7rem; white-space: nowrap; }
@@ -258,7 +259,8 @@ canvas { display: block; touch-action: none; }
 }
 
 @media (max-width: 340px) {
-  .detail-nav .hud-button { padding: 5px 3px; font-size: .62rem; }
+  .detail-nav .hud-button { padding: 5px 2px; font-size: .62rem; }
+  .visited-mark { margin-right: .15rem; }
 }
 
 @media (max-height: 500px) and (pointer: coarse) {
@@ -270,6 +272,7 @@ canvas { display: block; touch-action: none; }
   .detail-card { left: auto; right: 1rem; bottom: 4.75rem; width: min(20rem, 44vw); max-height: 11rem; padding: 1rem; }
   .detail-copy { margin-top: .5rem; font-size: .875rem; line-height: 1.45; }
   .detail-nav { left: 1rem; right: auto; bottom: .8rem; max-width: 58%; }
+  .detail-nav .hud-button { padding-inline: 9px; }
   .scene-footer { left: auto; right: 1rem; bottom: .8rem; width: auto; justify-content: flex-end; font-size: .64rem; }
   .tech-label { display: none; }
   .attribution { max-width: none; white-space: nowrap; }
