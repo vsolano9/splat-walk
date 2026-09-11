@@ -1,5 +1,7 @@
 # Splat Walk
 
+[Live demo](https://splat-walk.vercel.app) · [Source](https://github.com/vsolano9/splat-walk)
+
 Explore a real capture with **three.js r186's native WebGPU `GaussianSplat` and `SPZLoader`**, inside a small Next.js + Tailwind app. No third-party splat renderer, backend, auth or API keys.
 
 The bundled example is a cave-lion head. Swap in your own room-scale scan for a walkthrough. Controls are free-flight, without gravity or collision detection.
