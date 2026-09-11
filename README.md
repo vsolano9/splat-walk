@@ -15,7 +15,7 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:3000` in recent Chromium or Safari 26+ with WebGPU/hardware acceleration available. WebGPU needs HTTPS or localhost. Missing WebGPU, unavailable adapters and load failures have explanatory states.
+Open `http://localhost:3000` in recent Chromium or Safari 26+ with WebGPU/hardware acceleration available. WebGPU needs HTTPS or localhost. Missing WebGPU shows **WebGPU required**; an exposed API with no usable adapter shows **WebGPU unavailable**. Both can be retried after browser capabilities change. Initialization, GPU-interruption and scan-load failures keep their own error messages.
 
 ```sh
 npm run build
@@ -41,8 +41,14 @@ For Vercel: import this repository, select the Next.js preset and leave the proj
 - Aim or hover near a ring to reveal its label. On touch, the nearest ring is labelled while you drag.
 - Click/tap a ring or its nearby scan surface to open a detail. The keyboard-focusable dock buttons expose the same label and detail states.
 - Opened details are marked with a check and counted in the session-only `N / 3 found` display. Refreshing starts a new discovery session.
-- Closing with **Close**, **Esc**, an empty-canvas tap or **Reset** returns focus to the canvas or the dock button that opened the detail.
-- **Reset** eases back to the starting view in 400 ms, or returns immediately when reduced motion is requested. **Controls** restores the four-second hint.
+- Closing with **Close**, **Esc**, an empty-canvas tap or **Reset view** returns focus to the canvas or the dock button that opened the detail.
+- **Reset view** restores the starting camera position and orientation without clearing discoveries. It takes 400 ms, or returns immediately with reduced motion. **Reload capture** after an error also retains discoveries; a full page refresh starts a new session. **Controls** toggles the four-second hint.
+
+### Safari notes
+
+In the recorded Safari 26.6.2 desktop pass, the first Esc dismissed Safari's own mouse-capture banner and a second Esc released the mouse. Press Esc again if that banner consumed the first press. This is a [recorded browser behavior](design/reference/2026-09-11-final-hardening-qa/device-qa.md), not a guarantee for every Safari version; the app does not override it or detect Safari to change the HUD.
+
+For keyboard navigation on macOS, enable **Keyboard navigation** in System Settings > Keyboard. Safari Settings > Advanced > **Press Tab to highlight each item on a webpage** controls Tab/Option-Tab behavior for clickable items. See [Apple's keyboard navigation guidance](https://support.apple.com/guide/safari/keyboard-shortcuts-and-gestures-cpsh003/mac). The dock uses native buttons; no browser or system preferences are changed by the app.
 
 ## Use your own scan
 
@@ -60,14 +66,16 @@ During development, `window.__splatWalk` in the page's main-world console report
 - `app/page.tsx`, `app/layout.tsx`: one App Router page plus canonical, Open Graph, Twitter and icon metadata.
 - `public/og.png`, `public/icon.svg`, `app/apple-icon.png`: the committed 1200×630 real-scene share image and browser/touch icons.
 - `components/SplatScene.tsx`: WebGPU renderer, scan, native raycasts, rings, discovery state, accessible DOM HUD, responsive camera and resource cleanup.
-- `lib/controls.ts`: one hook for pointer-lock mouse, keyboard and two-zone touch input, including the reduced-motion-aware reset tween.
+- `lib/controls.ts`: the `createFlyControls()` factory for pointer-lock mouse, keyboard and two-zone touch input, including the reduced-motion-aware reset tween.
 - `lib/scene.config.ts`: the scan URL, transforms, spawn, named input tuning and annotations.
 - `app/globals.css`: Tailwind v4 and the dark museum/exhibition HUD palette.
 - `lib/three-addons.d.ts`: source-matched declarations for the two new addons. The installed runtime is r186; current `@types/three` is still r185.4. Remove these declarations when DefinitelyTyped includes the addons.
 
-The scan is the visual treatment. Opaque panels preserve contrast over arbitrary captures; there is no automatic orbit or cinematic camera path. `renderer.setAnimationLoop` owns the requestAnimationFrame-backed loop. DPR is capped at 2 desktop / 1.5 coarse-pointer, and rendering pauses in hidden tabs. The component cleans up source and generated geometries, materials, listeners, pending fetches and renderer resources.
+The scan is the visual treatment. High-opacity panels preserve contrast over arbitrary captures; there is no automatic orbit or cinematic camera path. `renderer.setAnimationLoop` owns the requestAnimationFrame-backed loop. DPR is capped at 2 desktop / 1.5 coarse-pointer, and rendering pauses in hidden tabs. The component cleans up source and generated geometries, materials, listeners, pending fetches and renderer resources. GPU loss ends the current attempt: the dead canvas is removed, pointer-lock state is cleared, and late loading/visibility callbacks cannot restart it. Retry creates a new renderer; app-initiated disposal does not replace the original error with a GPU-loss message.
 
 A deliberate click invokes native Gaussian ellipsoid raycasting and selects a configured hotspot near the surface hit. Marker raycasting covers rings when no nearby surface qualifies. No mesh proxy or fake scan rendering.
+
+The SPZ is fetched once per loading attempt. Byte progress uses the GET response's `Content-Length` when available; without a usable length it stays indeterminate. There is no separate HEAD probe.
 
 ## Sharing
 
@@ -75,7 +83,7 @@ The canonical public URL is `https://splat-walk.vercel.app`. Open Graph and Twit
 
 ## Verification
 
-Verified in real Chromium using the native WebGPU backend:
+The Phase 4–6 record below predates final-hardening PR #4. These were real Chromium/native-WebGPU checks of that release, not reruns of every subsequent branch head:
 
 - 195,099 splats rendered; the final normal load and interaction run had zero console warnings, errors or page errors.
 - WASD and Q/E changed camera position; pointer lock, mouse look, named sensitivity tuning and the 400 ms reset tween were exercised.
@@ -87,7 +95,21 @@ Verified in real Chromium using the native WebGPU backend:
 - Missing-WebGPU and HTTP 500 states were exercised with working retries; the HTTP failure recovered to the real scan.
 - `npm run check` passed TypeScript, ESLint, the production build and static prerendering.
 
-Phase 4–6 browser evidence lives in `design/reference/2026-09-11-phase-4-6-qa/`. Physical mobile hardware, Safari and induced physical GPU loss have not been tested. Large-scene streaming/LOD, collision, multiplayer, auth and CMS are out of scope.
+### Evidence and build scope
+
+| Record | Build tested | Scope |
+|---|---|---|
+| [Phase 4–6 evidence](design/reference/2026-09-11-phase-4-6-qa/) | Phase 4–6 candidate and production through `0ccea82` | Interaction, responsive layouts, keyboard/focus, reduced motion, metadata and release checks. |
+| [Single-fetch evidence](design/reference/2026-09-11-final-hardening-qa/spz-requests-after.txt) and [GPU-loss evidence](design/reference/2026-09-11-final-hardening-qa/device-loss-and-pointer-lock.md) | Local production build on `fix/spz-single-fetch`, code commit `7107471` | One GET, streamed progress, real device destruction and GPU-process crash/retry. |
+| [Desktop device QA](design/reference/2026-09-11-final-hardening-qa/device-qa.md) | Previous production, `0ccea82` | Chrome 153 input/pointer lock and Safari 26.6.2 rendering/input. |
+| [Physical iPhone QA](design/reference/2026-09-11-final-hardening-qa/iphone-12-pro/iphone-qa.md) | Previous production, `0ccea82` | iPhone 12 Pro, iOS 26.6.1, Safari, portrait 390×699: real touch, reset, background/resume, console and network. |
+| [ChatGPT recovery review](https://github.com/vsolano9/splat-walk/pull/4#issuecomment-5638998666) | Local production candidate matching `417a24c` | Real pointer lock plus device loss/retry/relock, interrupted loading, background/return, HTTP 500, retained discoveries, and narrow-viewport recovery. |
+
+[PR #4](https://github.com/vsolano9/splat-walk/pull/4) tracks subsequent usability checks and the final review/release status. A passing local build, successful preview, merge and live production verification are separate milestones. Older Safari/iPhone results do not establish coverage of a newer commit. Historical logs and screenshots retain their original labels and findings; the current implementation and PR follow-ups supersede resolved issues.
+
+Physical-device landscape was not captured and was explicitly skipped for this release. No physical Android or tablet pass is recorded. Touch-capability emulation and desktop resizing are not physical-device evidence. The earlier simulator-only no-adapter finding described the old generic retry copy; the current UI distinguishes **WebGPU unavailable** from a scan failure.
+
+Large-scene streaming/LOD, collision, multiplayer, auth, CMS and replacing the cave-lion sample are outside this showcase scope.
 
 ## License and sample attribution
 
