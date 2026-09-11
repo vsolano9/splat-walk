@@ -1,0 +1,11 @@
+Splat Walk keyboard/focus QA — production build, 1440x900, 2026-09-11
+
+Tab order observed: canvas -> Reset camera -> Explore -> Face to face.
+Focused dock button exposed the matching Face to face label.
+Enter opened the detail and moved focus to Close detail.
+Escape restored focus to Face to face, found.
+Enter on Close detail restored focus to Face to face, found.
+Switching from Face to face to Surface detail moved focus to Close detail; Escape restored focus to Surface detail, found.
+Clicking empty canvas while detail was open closed it and focused CANVAS.
+Reset closed detail and focused CANVAS.
+No tested close path left focus on BODY.

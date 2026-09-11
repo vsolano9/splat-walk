@@ -252,14 +252,13 @@ canvas { display: block; touch-action: none; }
   .scene-actions .hud-button { min-height: 40px; padding: 6px 10px; }
   .scan-hint { inset-inline: .75rem; top: 6.4rem; padding: .7rem .8rem; font-size: .76rem; }
   .detail-card { inset-inline: .75rem; bottom: 6.8rem; }
-  .detail-nav { inset-inline: .75rem; bottom: 3.3rem; max-width: calc(100% - 1.5rem); }
-  .detail-nav .hud-button { min-height: 38px; padding: 6px 9px; font-size: .75rem; }
+  .detail-nav { inset-inline: .75rem; bottom: 3.3rem; width: calc(100% - 1.5rem); max-width: none; gap: .05rem; }
+  .detail-nav .hud-button { flex: 1 1 auto; min-width: 0; min-height: 38px; padding: 6px 5px; font-size: .7rem; white-space: nowrap; }
   .scene-footer { inset-inline: .75rem; bottom: .52rem; font-size: .61rem; }
 }
 
 @media (max-width: 340px) {
-  .detail-nav { width: calc(100% - 1.5rem); max-width: none; gap: .05rem; }
-  .detail-nav .hud-button { flex: 1 1 auto; min-width: 0; padding: 5px 4px; font-size: .62rem; white-space: nowrap; }
+  .detail-nav .hud-button { padding: 5px 3px; font-size: .62rem; }
 }
 
 @media (max-height: 500px) and (pointer: coarse) {
@@ -267,7 +266,7 @@ canvas { display: block; touch-action: none; }
   .scene-title-panel { padding: .5rem .7rem; }
   .scene-tagline { margin-top: .12rem; font-size: .72rem; }
   .scan-hint { inset-inline: auto; left: 1rem; top: 10rem; max-width: 19rem; transform: none; padding: .65rem .75rem; text-align: left; }
-  .hotspot-label { left: 1rem; bottom: 4.2rem; transform: none; }
+  .hotspot-label { left: 1rem; bottom: 4.2rem; transform: none; animation: none; }
   .detail-card { left: auto; right: 1rem; bottom: 4.75rem; width: min(20rem, 44vw); max-height: 11rem; padding: 1rem; }
   .detail-copy { margin-top: .5rem; font-size: .875rem; line-height: 1.45; }
   .detail-nav { left: 1rem; right: auto; bottom: .8rem; max-width: 58%; }
