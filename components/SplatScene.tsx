@@ -160,6 +160,7 @@ export default function SplatScene() {
       return false;
     };
     const release = () => {
+      if (disposed) return;
       disposed = true;
       request.abort();
       removeVisibility?.();
@@ -186,6 +187,7 @@ export default function SplatScene() {
       setTargeted(null);
       setResetting(false);
       setLockError(false);
+      setLocked(false);
       if (!navigator.gpu) {
         setPhase("unsupported");
         setMessage("This capture needs WebGPU. Try Safari 26+ or a recent Chromium browser, with hardware acceleration enabled. Use HTTPS or localhost.");
@@ -205,12 +207,14 @@ export default function SplatScene() {
         // A device can vanish for reasons three.js forwards (driver reset, GPU process crash) and
         // for one it deliberately swallows: an explicit destroy(). Report every loss we did not
         // cause, exactly once, so the canvas never freezes with no way back.
-        let reportedLoss = false;
         const reportDeviceLoss = () => {
-          if (!active || disposed || reportedLoss) return;
-          reportedLoss = true;
-          renderer?.setAnimationLoop(null);
-          fly?.dispose();
+          if (!active || disposed) return;
+          // Loss ends this attempt, including pending loading and visibility callbacks.
+          release();
+          // dispose() removes the lock listener before it releases the mouse.
+          setLocked(false);
+          setResetting(false);
+          setSceneVisible(false);
           setPhase("error");
           setMessage("The GPU connection was interrupted. Reload the capture to continue.");
         };
@@ -243,6 +247,7 @@ export default function SplatScene() {
         resize();
         setMessage("Streaming the capture…");
         const response = await fetch(SPZ_URL, { signal: request.signal });
+        if (!active || disposed) return;
         if (!response.ok) throw new Error(`The scan could not load (HTTP ${response.status}). Check SPZ_URL and try again.`);
         // Progress needs Content-Length from this same response. A separate HEAD probe adds a
         // second request without adding information: when the transfer is compressed neither
@@ -260,6 +265,7 @@ export default function SplatScene() {
           let reported = -1;
           while (true) {
             const { done, value } = await reader.read();
+            if (!active || disposed) return;
             if (done) break;
             chunks.push(value);
             received += value.byteLength;
@@ -273,11 +279,11 @@ export default function SplatScene() {
           for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
           buffer = bytes.buffer;
         }
-        if (!active) return;
+        if (!active || disposed) return;
         setLoadProgress(100);
         setMessage("Building the splats…");
         geometry = await new SPZLoader().parse(buffer);
-        if (!active) { geometry.dispose(); return; }
+        if (!active || disposed) { geometry.dispose(); return; }
         if (!geometry.getAttribute("position")?.count) throw new Error("This scan is empty. Choose a non-empty SPZ capture.");
         splats = new GaussianSplat(geometry);
         splats.rotation.set(...SCAN_ROTATION);
@@ -300,7 +306,7 @@ export default function SplatScene() {
         controls.current = fly;
         let previousTime = performance.now();
         const animate = (time: number) => {
-          if (!active || !renderer) return;
+          if (!active || disposed || !renderer) return;
           const delta = Math.min((time - previousTime) / 1000, 0.05);
           previousTime = time;
           fly?.update(delta);
@@ -319,6 +325,7 @@ export default function SplatScene() {
         };
         renderer.setAnimationLoop(animate);
         const visibility = () => {
+          if (!active || disposed) return;
           if (document.hidden) renderer?.setAnimationLoop(null);
           else { previousTime = performance.now(); renderer?.setAnimationLoop(animate); }
         };
@@ -342,9 +349,9 @@ export default function SplatScene() {
         }
         setPhase("ready");
         setHint(true);
-        window.requestAnimationFrame(() => { if (active) setSceneVisible(true); });
+        window.requestAnimationFrame(() => { if (active && !disposed) setSceneVisible(true); });
       } catch (error) {
-        if (!active) return;
+        if (!active || disposed) return;
         release();
         setPhase("error");
         setMessage(error instanceof Error ? error.message : "The capture could not open. Please retry.");
