@@ -15,7 +15,9 @@ export default function SplatScene() {
   const cardClose = useRef<HTMLButtonElement>(null);
   const connectControls = useFlyControls();
   const [phase, setPhase] = useState<Phase>("loading");
-  const [message, setMessage] = useState("Opening the capture…");
+  const [message, setMessage] = useState("Preparing WebGPU…");
+  const [loadProgress, setLoadProgress] = useState<number | null>(null);
+  const [sceneVisible, setSceneVisible] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
   const [hint, setHint] = useState(true);
@@ -110,8 +112,11 @@ export default function SplatScene() {
     };
     async function start() {
       setPhase("loading");
-      setMessage("Opening the capture…");
+      setMessage("Preparing WebGPU…");
+      setLoadProgress(null);
+      setSceneVisible(false);
       setSelected(null);
+      setLockError(false);
       if (!navigator.gpu) {
         setPhase("unsupported");
         setMessage("This capture needs WebGPU. Try Safari 26+ or a recent Chromium browser, with hardware acceleration enabled. Use HTTPS or localhost.");
@@ -121,8 +126,9 @@ export default function SplatScene() {
         const adapter = await navigator.gpu.requestAdapter();
         if (!active) return;
         if (!adapter) throw new Error("No WebGPU adapter is available. Enable hardware acceleration, then retry.");
+        const coarsePointer = matchMedia("(pointer: coarse)").matches;
         renderer = new THREE.WebGPURenderer({ antialias: false, alpha: false });
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, matchMedia("(pointer: coarse)").matches ? 1.5 : 2));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarsePointer ? 1.5 : 2));
         await renderer.init();
         if (!active) { renderer.dispose(); return; }
         if (!("isWebGPUBackend" in renderer.backend) || renderer.backend.isWebGPUBackend !== true) throw new Error("A WebGPU device could not start. Try a supported browser with hardware acceleration enabled.");
@@ -135,7 +141,9 @@ export default function SplatScene() {
         };
         const canvas = renderer.domElement;
         canvas.tabIndex = 0;
-        canvas.setAttribute("aria-label", "Cave lion 3D scan. WASD to move, Q and E for height, arrow keys or mouse to look. Press Escape to release the mouse.");
+        canvas.setAttribute("aria-label", coarsePointer
+          ? "Cave lion 3D scan. Drag the left side to move, drag the right side to look, and tap a ring for details."
+          : "Cave lion 3D scan. WASD to move, Q and E for height, arrow keys or mouse to look. Press Escape to release the mouse.");
         container!.appendChild(canvas);
         const resize = () => {
           if (!renderer) return;
@@ -150,10 +158,44 @@ export default function SplatScene() {
         resizeObserver = new ResizeObserver(resize);
         resizeObserver.observe(container!);
         resize();
+        let totalBytes: number | null = null;
+        try {
+          const metadata = await fetch(SPZ_URL, { method: "HEAD", signal: request.signal });
+          const length = Number(metadata.headers.get("content-length"));
+          if (metadata.ok && Number.isFinite(length) && length > 0) totalBytes = length;
+        } catch (error) {
+          if (request.signal.aborted) throw error;
+        }
+        setMessage("Streaming the capture…");
+        setLoadProgress(totalBytes ? 0 : null);
         const response = await fetch(SPZ_URL, { signal: request.signal });
         if (!response.ok) throw new Error(`The scan could not load (HTTP ${response.status}). Check SPZ_URL and try again.`);
-        const buffer = await response.arrayBuffer();
+        let buffer: ArrayBuffer;
+        if (!response.body) {
+          buffer = await response.arrayBuffer();
+        } else {
+          const reader = response.body.getReader();
+          const chunks: Uint8Array[] = [];
+          let received = 0;
+          let reported = -1;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.byteLength;
+            if (totalBytes) {
+              const progress = Math.min(99, Math.floor(received / totalBytes * 100));
+              if (progress !== reported) { reported = progress; setLoadProgress(progress); }
+            }
+          }
+          const bytes = new Uint8Array(received);
+          let offset = 0;
+          for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+          buffer = bytes.buffer;
+        }
         if (!active) return;
+        setLoadProgress(100);
+        setMessage("Building the splats…");
         geometry = await new SPZLoader().parse(buffer);
         if (!active) { geometry.dispose(); return; }
         if (!geometry.getAttribute("position")?.count) throw new Error("This scan is empty. Choose a non-empty SPZ capture.");
@@ -194,6 +236,7 @@ export default function SplatScene() {
         }
         setPhase("ready");
         setHint(true);
+        window.requestAnimationFrame(() => { if (active) setSceneVisible(true); });
       } catch (error) {
         if (!active) return;
         release();
@@ -211,48 +254,54 @@ export default function SplatScene() {
 
   const closeCard = () => { setSelected(null); host.current?.querySelector("canvas")?.focus({ preventScroll: true }); };
   return <>
-    <div ref={host} className="absolute inset-0" data-phase={phase} />
-    <header className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4 p-5 sm:p-8">
-      <div className="rounded-lg bg-canvas p-3">
-        <h1 className="text-xl font-medium">Splat Walk<span className="ml-3 text-subtle">/ Cave lion</span></h1>
-        <p className="mt-1 text-sm text-subtle">A captured world, up close.</p>
+    <div ref={host} className={`scene-surface absolute inset-0 ${sceneVisible ? "scene-visible" : ""}`} data-phase={phase} />
+    <header className="scene-header pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4">
+      <div className="scene-title-panel rounded-lg bg-canvas">
+        <h1 className="scene-heading font-medium">Splat Walk<span className="scene-name text-subtle">/ Cave lion</span></h1>
+        <p className="scene-tagline text-subtle">A captured world, up close.</p>
       </div>
-      {phase === "ready" && <div className="pointer-events-auto flex gap-2">
+      {phase === "ready" && <div className="scene-actions pointer-events-auto flex gap-2">
         <button className="hud-button" onClick={() => { controls.current?.reset(); setSelected(null); }} aria-label="Reset camera">Reset</button>
-        <button className="hud-button hidden sm:block" onClick={() => { setSelected(null); setLockError(false); void controls.current?.lock(); }}>Explore</button>
+        <button className="hud-button desktop-explore" onClick={() => { setSelected(null); setLockError(false); void controls.current?.lock(); }}>Explore</button>
       </div>}
     </header>
 
-    {phase !== "ready" && <div className="absolute inset-0 grid place-items-center p-6">
-      <section className="max-w-md rounded-xl bg-panel p-6" role="status" aria-live="polite">
+    {phase !== "ready" && <div className="loading-shell absolute inset-0 grid place-items-center p-6">
+      <section className="loading-card max-w-md rounded-xl bg-panel p-6" role="status" aria-live="polite">
         <h2 className="mb-3 text-xl">{phase === "loading" ? "Loading the scan" : phase === "unsupported" ? "WebGPU required" : "Let's try that again"}</h2>
         <p className="text-base leading-relaxed text-subtle">{message}</p>
+        {phase === "loading" && <div className="loading-progress-wrap mt-5">
+          <div className={`loading-track ${loadProgress === null ? "loading-indeterminate" : ""}`} role="progressbar" aria-label="Scan loading progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={loadProgress ?? undefined}>
+            <span className="loading-fill" style={loadProgress === null ? undefined : { width: `${loadProgress}%` }} />
+          </div>
+          <p className="mt-2 text-xs text-subtle" aria-hidden="true">{loadProgress === null ? "Connecting to capture" : `${loadProgress}% loaded`}</p>
+        </div>}
         {phase !== "loading" && <button className="hud-button mt-4 border border-line" onClick={() => setAttempt((value) => value + 1)}>Reload capture</button>}
       </section>
     </div>}
 
     {phase === "ready" && <>
       {locked && <div className="pointer-events-none absolute inset-0 grid place-items-center" aria-hidden="true"><span className="h-2 w-2 rounded-full border border-ink" /></div>}
-      {selected === null && <div className={`hint pointer-events-none absolute inset-x-5 top-32 mx-auto max-w-lg rounded-lg bg-panel p-4 text-center text-sm text-subtle ${hint || lockError ? "opacity-100" : "opacity-0"}`} aria-hidden={!hint && !lockError}>
+      {selected === null && <div className={`scan-hint hint pointer-events-none absolute mx-auto rounded-lg bg-panel text-center text-sm text-subtle ${hint || lockError ? "opacity-100" : "opacity-0"}`} aria-hidden={!hint && !lockError}>
         <p className="desktop-hint">Click to explore · WASD move · Q/E height<br />Mouse or arrows look · Esc releases · Click a ring for details</p>
         <p className="touch-hint">Drag left to move · Drag right to look<br />Tap a ring to discover a detail</p>
         {lockError && <p className="mt-2 text-ink">Mouse capture was unavailable. Drag to look, or try Explore again.</p>}
       </div>}
-      {selected !== null && <section aria-labelledby="hotspot-title" role="dialog" aria-modal="false" onKeyDown={(event) => { if (event.key === "Escape") closeCard(); }} className="absolute inset-x-5 bottom-52 max-h-64 overflow-auto rounded-xl bg-panel p-5 sm:inset-x-auto sm:right-8 sm:bottom-32 sm:w-80">
+      {selected !== null && <section aria-labelledby="hotspot-title" role="dialog" aria-modal="false" onKeyDown={(event) => { if (event.key === "Escape") closeCard(); }} className="detail-card absolute overflow-auto rounded-xl bg-panel">
         <div className="flex items-start justify-between gap-3">
-          <h2 id="hotspot-title" className="pt-2 text-xl font-medium">{HOTSPOTS[selected].label}</h2>
+          <h2 id="hotspot-title" className="detail-title font-medium">{HOTSPOTS[selected].label}</h2>
           <button ref={cardClose} className="hud-button" onClick={closeCard} aria-label="Close detail">Close</button>
         </div>
-        <p className="mt-3 text-base leading-relaxed text-subtle">{HOTSPOTS[selected].description}</p>
+        <p className="detail-copy text-subtle">{HOTSPOTS[selected].description}</p>
       </section>}
-      <nav aria-label="Scan details" className="absolute inset-x-5 bottom-24 flex flex-wrap gap-2 sm:inset-x-8 sm:bottom-20">
+      <nav aria-label="Scan details" className="detail-nav absolute">
         {HOTSPOTS.map((hotspot, index) => <button key={hotspot.label} className={`hud-button text-sm ${selected === index ? "border border-accent" : "border border-transparent"}`} aria-pressed={selected === index} onClick={() => setSelected(index)}>{hotspot.label}</button>)}
         <button className="hud-button text-sm" onClick={() => setHint((value) => !value)} aria-label="Show controls">Controls</button>
       </nav>
     </>}
-    <footer className="pointer-events-none absolute inset-x-5 bottom-4 flex flex-wrap items-end justify-between gap-2 text-xs text-subtle sm:inset-x-8 sm:bottom-6">
-      <p className="rounded bg-canvas px-2 py-1">three.js r186 native WebGPU splats</p>
-      <p className="pointer-events-auto max-w-72 rounded bg-canvas px-2 py-1">Lion: <a className="underline" href="https://superspl.at/scene/56155c3f" target="_blank" rel="noreferrer">Renaud / Joanna Kobierska</a> · <a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a></p>
+    <footer className="scene-footer pointer-events-none absolute text-xs text-subtle">
+      <p className="tech-label rounded bg-canvas px-2 py-1">three.js r186 native WebGPU splats</p>
+      <p className="attribution pointer-events-auto rounded bg-canvas px-2 py-1">Lion: <a className="underline" href="https://superspl.at/scene/56155c3f" target="_blank" rel="noreferrer">Renaud / Joanna Kobierska</a> · <a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a></p>
     </footer>
   </>;
 }
