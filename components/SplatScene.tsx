@@ -29,12 +29,13 @@ export default function SplatScene() {
   const [hint, setHint] = useState(true);
   const [attempt, setAttempt] = useState(0);
   const [lockError, setLockError] = useState(false);
+  const controlsVisible = selected === null && (hint || lockError);
 
   useEffect(() => {
-    if (phase !== "ready" || !hint) return;
+    if (phase !== "ready" || !hint || selected !== null) return;
     const timer = window.setTimeout(() => setHint(false), 4000);
     return () => window.clearTimeout(timer);
-  }, [phase, hint]);
+  }, [phase, hint, selected]);
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -465,7 +466,7 @@ export default function SplatScene() {
         <span>{HOTSPOTS[targeted].label}</span>
         <small>{visited.has(targeted) ? "Found" : "Inspect"}</small>
       </div>}
-      {selected === null && <div className={`scan-hint hint pointer-events-none absolute mx-auto rounded-lg bg-panel text-center text-sm text-subtle ${hint || lockError ? "opacity-100" : "opacity-0"}`} aria-hidden={!hint && !lockError}>
+      {selected === null && <div id="scan-controls" className={`scan-hint hint pointer-events-none absolute mx-auto rounded-lg bg-panel text-center text-sm text-subtle ${hint || lockError ? "opacity-100" : "opacity-0"}`} aria-hidden={!hint && !lockError}>
         <p className="desktop-hint">Click to explore · WASD move · Q/E height<br />Mouse or arrows look · Esc releases · Aim at a ring for its label</p>
         <p className="touch-hint">Drag left to move · Drag right to look<br />Move near a ring to reveal it · Tap to discover</p>
         {lockError && <p className="mt-2 text-ink">Mouse capture was unavailable. Drag to look, or try Explore again.</p>}
@@ -505,7 +506,16 @@ export default function SplatScene() {
             {hotspot.label}
           </button>;
         })}
-        <button className="hud-button detail-button controls-button text-sm" onClick={() => setHint((value) => !value)} aria-label="Show controls">Controls</button>
+        <button
+          className="hud-button detail-button controls-button text-sm"
+          aria-expanded={controlsVisible}
+          aria-controls={selected === null ? "scan-controls" : undefined}
+          onClick={(event) => {
+            if (selected !== null) closeCard(event.currentTarget);
+            setLockError(false);
+            setHint(!controlsVisible);
+          }}
+        >Controls</button>
       </nav>
     </>}
     <footer className="scene-footer pointer-events-none absolute text-xs text-subtle">
