@@ -259,18 +259,20 @@ canvas { display: block; touch-action: none; }
 }
 
 @media (max-width: 340px) {
-  .detail-nav .hud-button { padding: 5px 3px; font-size: .62rem; }
+  .detail-nav .hud-button { padding: 5px 2px; font-size: .62rem; }
+  .visited-mark { margin-right: .15rem; }
 }
 
 @media (max-height: 500px) and (pointer: coarse) {
   .scene-header { padding: .8rem 1rem; }
   .scene-title-panel { padding: .5rem .7rem; }
   .scene-tagline { margin-top: .12rem; font-size: .72rem; }
-  .scan-hint { inset-inline: auto; left: 1rem; top: 10rem; max-width: 19rem; transform: none; padding: .65rem .75rem; text-align: left; }
+  .scan-hint { inset-inline: auto; left: 1rem; top: 10rem; max-width: 19rem; transform: none; padding: .65rem .75rem; font-size: .875rem; line-height: 1.55; text-align: left; }
   .hotspot-label { left: 1rem; bottom: 4.2rem; transform: none; animation: none; }
   .detail-card { left: auto; right: 1rem; bottom: 4.75rem; width: min(20rem, 44vw); max-height: 11rem; padding: 1rem; }
   .detail-copy { margin-top: .5rem; font-size: .875rem; line-height: 1.45; }
   .detail-nav { left: 1rem; right: auto; bottom: .8rem; max-width: 58%; }
+  .detail-nav .hud-button { padding-inline: 9px; }
   .scene-footer { left: auto; right: 1rem; bottom: .8rem; width: auto; justify-content: flex-end; font-size: .64rem; }
   .tech-label { display: none; }
   .attribution { max-width: none; white-space: nowrap; }
