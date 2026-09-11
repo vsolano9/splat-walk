@@ -13,14 +13,20 @@ export default function SplatScene() {
   const host = useRef<HTMLDivElement>(null);
   const controls = useRef<FlyControls | null>(null);
   const cardClose = useRef<HTMLButtonElement>(null);
+  const restoreFocusTarget = useRef<HTMLElement | null>(null);
   const selectedRef = useRef<number | null>(null);
+  const targetedRef = useRef<number | null>(null);
+  const visitedRef = useRef<ReadonlySet<number>>(new Set());
   const connectControls = useFlyControls();
   const [phase, setPhase] = useState<Phase>("loading");
   const [message, setMessage] = useState("Preparing WebGPU…");
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
   const [sceneVisible, setSceneVisible] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
+  const [targeted, setTargeted] = useState<number | null>(null);
+  const [visited, setVisited] = useState<ReadonlySet<number>>(() => new Set());
   const [locked, setLocked] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [hint, setHint] = useState(true);
   const [attempt, setAttempt] = useState(0);
   const [lockError, setLockError] = useState(false);
@@ -31,7 +37,11 @@ export default function SplatScene() {
     return () => window.clearTimeout(timer);
   }, [phase, hint]);
 
-  useEffect(() => { selectedRef.current = selected; if (selected !== null) cardClose.current?.focus({ preventScroll: true }); }, [selected]);
+  useEffect(() => {
+    selectedRef.current = selected;
+    if (selected !== null) cardClose.current?.focus({ preventScroll: true });
+  }, [selected]);
+  useEffect(() => { targetedRef.current = targeted; }, [targeted]);
 
   useEffect(() => {
     const container = host.current;
@@ -52,6 +62,7 @@ export default function SplatScene() {
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     const positions = HOTSPOTS.map((hotspot) => new THREE.Vector3(...hotspot.position));
+    const projectedHotspot = new THREE.Vector3();
     const markerGeometry = new THREE.RingGeometry(0.55, 1, 40);
     const markerMaterials = positions.map(() => new THREE.MeshBasicMaterial({ color: "#dcebb1", side: THREE.DoubleSide, depthTest: false, transparent: true, opacity: 0.82, toneMapped: false }));
     const markers = positions.map((position, index) => {
@@ -63,13 +74,53 @@ export default function SplatScene() {
       return marker;
     });
     let lastPick: { source: string; index: number; point?: number[] } | null = null;
+    const markVisited = (index: number) => {
+      setVisited((current) => {
+        if (current.has(index)) return current;
+        const next = new Set(current);
+        next.add(index);
+        visitedRef.current = next;
+        return next;
+      });
+    };
     const selectHotspot = (index: number) => {
-      if (document.pointerLockElement === renderer?.domElement) document.exitPointerLock();
+      if (!renderer) return;
+      if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+      restoreFocusTarget.current = renderer.domElement;
+      selectedRef.current = index;
       setSelected(index);
+      setTargeted(null);
+      markVisited(index);
+    };
+    const updateTarget = (x: number, y: number, centered: boolean, coarse: boolean) => {
+      if (!renderer) return;
+      const canvas = renderer.domElement;
+      const bounds = canvas.getBoundingClientRect();
+      const targetX = centered ? bounds.left + bounds.width / 2 : x;
+      const targetY = centered ? bounds.top + bounds.height / 2 : y;
+      const radius = coarse ? 76 : 34;
+      let nearest = -1;
+      let nearestDistance = radius * radius;
+      camera.updateMatrixWorld();
+      positions.forEach((position, index) => {
+        projectedHotspot.copy(position).project(camera);
+        if (projectedHotspot.z < -1 || projectedHotspot.z > 1) return;
+        const screenX = bounds.left + (projectedHotspot.x + 1) / 2 * bounds.width;
+        const screenY = bounds.top + (1 - projectedHotspot.y) / 2 * bounds.height;
+        const distance = (screenX - targetX) ** 2 + (screenY - targetY) ** 2;
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = index;
+        }
+      });
+      if (targetedRef.current === nearest) return;
+      targetedRef.current = nearest === -1 ? null : nearest;
+      setTargeted(targetedRef.current);
     };
     const pick = (x: number, y: number, centered: boolean) => {
       if (!renderer || !splats) return false;
-      const bounds = renderer.domElement.getBoundingClientRect();
+      const canvas = renderer.domElement;
+      const bounds = canvas.getBoundingClientRect();
       pointer.set(centered ? 0 : (x - bounds.left) / bounds.width * 2 - 1, centered ? 0 : -(y - bounds.top) / bounds.height * 2 + 1);
       camera.updateMatrixWorld();
       scene.updateMatrixWorld(true);
@@ -90,11 +141,22 @@ export default function SplatScene() {
         }
       }
       const marker = raycaster.intersectObjects(markers, false)[0];
-      if (!marker) return false;
-      const index = marker.object.userData.hotspotIndex as number;
-      lastPick = { source: "marker", index };
-      selectHotspot(index);
-      return true;
+      if (marker) {
+        const index = marker.object.userData.hotspotIndex as number;
+        lastPick = { source: "marker", index };
+        selectHotspot(index);
+        return true;
+      }
+      if (selectedRef.current !== null) {
+        selectedRef.current = null;
+        targetedRef.current = null;
+        restoreFocusTarget.current = canvas;
+        setSelected(null);
+        setTargeted(null);
+        canvas.focus({ preventScroll: true });
+        return true;
+      }
+      return false;
     };
     const release = () => {
       request.abort();
@@ -116,7 +178,11 @@ export default function SplatScene() {
       setMessage("Preparing WebGPU…");
       setLoadProgress(null);
       setSceneVisible(false);
+      selectedRef.current = null;
+      targetedRef.current = null;
       setSelected(null);
+      setTargeted(null);
+      setResetting(false);
       setLockError(false);
       if (!navigator.gpu) {
         setPhase("unsupported");
@@ -204,7 +270,21 @@ export default function SplatScene() {
         splats = new GaussianSplat(geometry);
         splats.rotation.set(...SCAN_ROTATION);
         scene.add(splats, ...markers);
-        fly = connectControls({ camera, canvas, onPick: pick, onLock: setLocked, onLockError: () => setLockError(true) });
+        fly = connectControls({
+          camera,
+          canvas,
+          onPick: pick,
+          onTarget: updateTarget,
+          onTargetClear: () => {
+            if (targetedRef.current === null) return;
+            targetedRef.current = null;
+            setTargeted(null);
+          },
+          onLock: setLocked,
+          onLockError: () => setLockError(true),
+          onResetChange: setResetting,
+          reduceMotion,
+        });
         controls.current = fly;
         let previousTime = performance.now();
         const animate = (time: number) => {
@@ -215,9 +295,12 @@ export default function SplatScene() {
           markers.forEach((marker, index) => {
             marker.quaternion.copy(camera.quaternion);
             const activeMarker = selectedRef.current === index;
-            const wave = reduceMotion ? 0 : Math.sin(time * 0.0022 + index * 1.9);
-            marker.scale.setScalar(MARKER_SIZE * (activeMarker ? 1.13 : 1) * (1 + wave * 0.055));
-            markerMaterials[index].opacity = activeMarker ? 1 : reduceMotion ? 0.82 : 0.78 + wave * 0.12;
+            const targetedMarker = targetedRef.current === index;
+            const visitedMarker = visitedRef.current.has(index);
+            const wave = reduceMotion || visitedMarker ? 0 : Math.sin(time * 0.0022 + index * 1.9);
+            const stateScale = activeMarker ? 1.13 : targetedMarker ? 1.08 : visitedMarker ? 0.88 : 1;
+            marker.scale.setScalar(MARKER_SIZE * stateScale * (1 + wave * 0.055));
+            markerMaterials[index].opacity = activeMarker || targetedMarker ? 1 : visitedMarker ? 0.54 : reduceMotion ? 0.82 : 0.78 + wave * 0.12;
           });
           renderer.render(scene, camera);
         };
@@ -236,6 +319,8 @@ export default function SplatScene() {
             rotation: camera.rotation.toArray(),
             splatCount: geometry?.getAttribute("position").count,
             lastPick,
+            targeted: targetedRef.current,
+            visited: [...visitedRef.current],
             hotspots: positions.map((position, index) => {
               const screen = position.clone().project(camera);
               return { index, x: (screen.x + 1) / 2 * canvas.clientWidth, y: (1 - screen.y) / 2 * canvas.clientHeight };
@@ -260,18 +345,68 @@ export default function SplatScene() {
     };
   }, [attempt, connectControls]);
 
-  const closeCard = () => { setSelected(null); host.current?.querySelector("canvas")?.focus({ preventScroll: true }); };
+  const closeCard = (focusTarget: HTMLElement | null = restoreFocusTarget.current) => {
+    selectedRef.current = null;
+    targetedRef.current = null;
+    setSelected(null);
+    setTargeted(null);
+    window.requestAnimationFrame(() => {
+      const canvas = host.current?.querySelector("canvas");
+      const target = focusTarget?.isConnected ? focusTarget : canvas;
+      target?.focus({ preventScroll: true });
+    });
+  };
+  const openFromDock = (index: number, button: HTMLButtonElement) => {
+    restoreFocusTarget.current = button;
+    selectedRef.current = index;
+    targetedRef.current = null;
+    setSelected(index);
+    setTargeted(null);
+    setVisited((current) => {
+      if (current.has(index)) return current;
+      const next = new Set(current);
+      next.add(index);
+      visitedRef.current = next;
+      return next;
+    });
+  };
   return <>
-    <div ref={host} className={`scene-surface absolute inset-0 ${sceneVisible ? "scene-visible" : ""}`} data-phase={phase} />
+    <div
+      ref={host}
+      className={`scene-surface absolute inset-0 ${sceneVisible ? "scene-visible" : ""}`}
+      data-phase={phase}
+      data-resetting={resetting || undefined}
+    />
     <div className="scene-atmosphere pointer-events-none absolute inset-0" aria-hidden="true" />
     <header className="scene-header pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4">
       <div className="scene-title-panel rounded-lg bg-canvas">
         <h1 className="scene-heading font-medium">Splat Walk<span className="scene-name text-subtle">/ Cave lion</span></h1>
-        <p className="scene-tagline text-subtle">A captured world, up close.</p>
+        <div className="scene-title-meta">
+          <p className="scene-tagline text-subtle">A captured world, up close.</p>
+          {phase === "ready" && <p
+            className={`discovery-progress ${visited.size === HOTSPOTS.length ? "is-complete" : ""}`}
+            data-discovery-progress
+            data-all-found={visited.size === HOTSPOTS.length || undefined}
+            aria-live="polite"
+          >{visited.size} / {HOTSPOTS.length} found</p>}
+        </div>
       </div>
       {phase === "ready" && <div className="scene-actions pointer-events-auto flex gap-2">
-        <button className="hud-button" onClick={() => { controls.current?.reset(); setSelected(null); }} aria-label="Reset camera">Reset</button>
-        <button className="hud-button desktop-explore primary-action" onClick={() => { setSelected(null); setLockError(false); void controls.current?.lock(); }}>Explore</button>
+        <button
+          className="hud-button"
+          data-resetting={resetting || undefined}
+          disabled={resetting}
+          onClick={() => {
+            controls.current?.reset();
+            closeCard(host.current?.querySelector("canvas") ?? null);
+          }}
+          aria-label="Reset camera"
+        >{resetting ? "Resetting" : "Reset"}</button>
+        <button className="hud-button desktop-explore primary-action" onClick={() => {
+          closeCard(host.current?.querySelector("canvas") ?? null);
+          setLockError(false);
+          void controls.current?.lock();
+        }}>Explore</button>
       </div>}
     </header>
 
@@ -291,26 +426,65 @@ export default function SplatScene() {
 
     {phase === "ready" && <>
       {locked && <div className="pointer-events-none absolute inset-0 grid place-items-center" aria-hidden="true"><span className="scene-crosshair" /></div>}
+      {targeted !== null && selected === null && <div
+        className={`hotspot-label pointer-events-none absolute ${visited.has(targeted) ? "is-visited" : ""}`}
+        data-hotspot-label
+        data-hotspot-index={targeted}
+        role="status"
+      >
+        <span>{HOTSPOTS[targeted].label}</span>
+        <small>{visited.has(targeted) ? "Found" : "Inspect"}</small>
+      </div>}
       {selected === null && <div className={`scan-hint hint pointer-events-none absolute mx-auto rounded-lg bg-panel text-center text-sm text-subtle ${hint || lockError ? "opacity-100" : "opacity-0"}`} aria-hidden={!hint && !lockError}>
-        <p className="desktop-hint">Click to explore · WASD move · Q/E height<br />Mouse or arrows look · Esc releases · Click a ring for details</p>
-        <p className="touch-hint">Drag left to move · Drag right to look<br />Tap a ring to discover a detail</p>
+        <p className="desktop-hint">Click to explore · WASD move · Q/E height<br />Mouse or arrows look · Esc releases · Aim at a ring for its label</p>
+        <p className="touch-hint">Drag left to move · Drag right to look<br />Move near a ring to reveal it · Tap to discover</p>
         {lockError && <p className="mt-2 text-ink">Mouse capture was unavailable. Drag to look, or try Explore again.</p>}
       </div>}
-      {selected !== null && <section aria-labelledby="hotspot-title" role="dialog" aria-modal="false" onKeyDown={(event) => { if (event.key === "Escape") closeCard(); }} className="detail-card absolute overflow-auto rounded-xl bg-panel">
+      {selected !== null && <section
+        aria-labelledby="hotspot-title"
+        role="dialog"
+        aria-modal="false"
+        onKeyDown={(event) => { if (event.key === "Escape") closeCard(); }}
+        className="detail-card absolute overflow-auto rounded-xl bg-panel"
+        data-hotspot-detail={selected}
+      >
+        <span className="detail-sheet-handle" aria-hidden="true" />
         <div className="flex items-start justify-between gap-3">
           <h2 id="hotspot-title" className="detail-title font-medium">{HOTSPOTS[selected].label}</h2>
-          <button ref={cardClose} className="hud-button detail-close" onClick={closeCard} aria-label="Close detail">Close</button>
+          <button ref={cardClose} className="hud-button detail-close" onClick={() => closeCard()} aria-label="Close detail">Close</button>
         </div>
         <p className="detail-copy text-subtle">{HOTSPOTS[selected].description}</p>
       </section>}
       <nav aria-label="Scan details" className="detail-nav absolute">
-        {HOTSPOTS.map((hotspot, index) => <button key={hotspot.label} className={`hud-button detail-button text-sm ${selected === index ? "is-selected" : ""}`} aria-pressed={selected === index} onClick={() => setSelected(index)}>{hotspot.label}</button>)}
+        {HOTSPOTS.map((hotspot, index) => {
+          const isVisited = visited.has(index);
+          return <button
+            key={hotspot.label}
+            className={`hud-button detail-button text-sm ${selected === index ? "is-selected" : ""} ${isVisited ? "is-visited" : ""}`}
+            data-hotspot-button={index}
+            data-visited={isVisited || undefined}
+            aria-label={`${hotspot.label}${isVisited ? ", found" : ""}`}
+            aria-pressed={selected === index}
+            onFocus={() => setTargeted(index)}
+            onBlur={() => setTargeted((current) => current === index ? null : current)}
+            onMouseEnter={() => setTargeted(index)}
+            onMouseLeave={() => setTargeted((current) => current === index ? null : current)}
+            onClick={(event) => openFromDock(index, event.currentTarget)}
+          >
+            <span className="visited-mark" aria-hidden="true">✓</span>
+            {hotspot.label}
+          </button>;
+        })}
         <button className="hud-button detail-button controls-button text-sm" onClick={() => setHint((value) => !value)} aria-label="Show controls">Controls</button>
       </nav>
     </>}
     <footer className="scene-footer pointer-events-none absolute text-xs text-subtle">
       <p className="tech-label rounded bg-canvas px-2 py-1">three.js r186 native WebGPU splats</p>
-      <p className="attribution pointer-events-auto rounded bg-canvas px-2 py-1">Lion: <a className="underline" href="https://superspl.at/scene/56155c3f" target="_blank" rel="noreferrer">Renaud / Joanna Kobierska</a> · <a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a></p>
+      <p className="attribution pointer-events-auto rounded bg-canvas px-2 py-1">
+        Lion: <a className="underline" href="https://superspl.at/scene/56155c3f" target="_blank" rel="noreferrer">Renaud / Joanna Kobierska</a>
+        <span aria-hidden="true"> · </span><a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>
+        <span aria-hidden="true"> · </span><a className="source-link" href="https://github.com/vsolano9/splat-walk" target="_blank" rel="noreferrer">Source ↗</a>
+      </p>
     </footer>
   </>;
 }
