@@ -292,6 +292,7 @@ export default function SplatScene() {
           const delta = Math.min((time - previousTime) / 1000, 0.05);
           previousTime = time;
           fly?.update(delta);
+          if (document.pointerLockElement === canvas) updateTarget(0, 0, true, false);
           markers.forEach((marker, index) => {
             marker.quaternion.copy(camera.quaternion);
             const activeMarker = selectedRef.current === index;
