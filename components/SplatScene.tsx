@@ -1,0 +1,258 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import * as THREE from "three/webgpu";
+import { GaussianSplat } from "three/addons/objects/GaussianSplat.js";
+import { SPZLoader } from "three/addons/loaders/SPZLoader.js";
+import { useFlyControls, type FlyControls } from "@/lib/controls";
+import { HOTSPOTS, HOTSPOT_RADIUS, LOOK_AT, MARKER_SIZE, SCAN_ROTATION, SPAWN_POSITION, SPZ_URL } from "@/lib/scene.config";
+
+type Phase = "loading" | "ready" | "unsupported" | "error";
+
+export default function SplatScene() {
+  const host = useRef<HTMLDivElement>(null);
+  const controls = useRef<FlyControls | null>(null);
+  const cardClose = useRef<HTMLButtonElement>(null);
+  const connectControls = useFlyControls();
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [message, setMessage] = useState("Opening the capture…");
+  const [selected, setSelected] = useState<number | null>(null);
+  const [locked, setLocked] = useState(false);
+  const [hint, setHint] = useState(true);
+  const [attempt, setAttempt] = useState(0);
+  const [lockError, setLockError] = useState(false);
+
+  useEffect(() => {
+    if (phase !== "ready" || !hint) return;
+    const timer = window.setTimeout(() => setHint(false), 4000);
+    return () => window.clearTimeout(timer);
+  }, [phase, hint]);
+
+  useEffect(() => { if (selected !== null) cardClose.current?.focus({ preventScroll: true }); }, [selected]);
+
+  useEffect(() => {
+    const container = host.current;
+    if (!container) return;
+    let active = true;
+    let renderer: THREE.WebGPURenderer | undefined;
+    let splats: GaussianSplat | undefined;
+    let geometry: THREE.BufferGeometry | undefined;
+    let resizeObserver: ResizeObserver | undefined;
+    let fly: FlyControls | undefined;
+    let removeVisibility: (() => void) | undefined;
+    const request = new AbortController();
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color("#111411");
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.005, 30);
+    camera.position.fromArray(SPAWN_POSITION);
+    camera.lookAt(...LOOK_AT);
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    const positions = HOTSPOTS.map((hotspot) => new THREE.Vector3(...hotspot.position));
+    const markerGeometry = new THREE.RingGeometry(0.55, 1, 32);
+    const markerMaterial = new THREE.MeshBasicMaterial({ color: "#d8e5b0", side: THREE.DoubleSide, depthTest: false, transparent: true, toneMapped: false });
+    const markers = positions.map((position, index) => {
+      const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+      marker.position.copy(position);
+      marker.scale.setScalar(MARKER_SIZE);
+      marker.userData.hotspotIndex = index;
+      marker.renderOrder = 10;
+      return marker;
+    });
+    let lastPick: { source: string; index: number; point?: number[] } | null = null;
+    const selectHotspot = (index: number) => {
+      if (document.pointerLockElement === renderer?.domElement) document.exitPointerLock();
+      setSelected(index);
+    };
+    const pick = (x: number, y: number, centered: boolean) => {
+      if (!renderer || !splats) return false;
+      const bounds = renderer.domElement.getBoundingClientRect();
+      pointer.set(centered ? 0 : (x - bounds.left) / bounds.width * 2 - 1, centered ? 0 : -(y - bounds.top) / bounds.height * 2 + 1);
+      camera.updateMatrixWorld();
+      scene.updateMatrixWorld(true);
+      raycaster.setFromCamera(pointer, camera);
+      // Native r186 ellipsoid raycasting. Only run on a deliberate click, never per frame.
+      const surface = raycaster.intersectObject(splats, false)[0];
+      if (surface) {
+        let nearest = -1;
+        let distance = HOTSPOT_RADIUS * HOTSPOT_RADIUS;
+        positions.forEach((position, index) => {
+          const candidate = surface.point.distanceToSquared(position);
+          if (candidate < distance) { distance = candidate; nearest = index; }
+        });
+        if (nearest !== -1) {
+          lastPick = { source: "splat", index: nearest, point: surface.point.toArray() };
+          selectHotspot(nearest);
+          return true;
+        }
+      }
+      const marker = raycaster.intersectObjects(markers, false)[0];
+      if (!marker) return false;
+      const index = marker.object.userData.hotspotIndex as number;
+      lastPick = { source: "marker", index };
+      selectHotspot(index);
+      return true;
+    };
+    const release = () => {
+      request.abort();
+      removeVisibility?.();
+      resizeObserver?.disconnect();
+      fly?.dispose();
+      if (controls.current === fly) controls.current = null;
+      renderer?.setAnimationLoop(null);
+      splats?.geometry.dispose();
+      splats?.material.dispose();
+      geometry?.dispose();
+      markerGeometry.dispose();
+      markerMaterial.dispose();
+      renderer?.dispose();
+      renderer?.domElement.remove();
+    };
+    async function start() {
+      setPhase("loading");
+      setMessage("Opening the capture…");
+      setSelected(null);
+      if (!navigator.gpu) {
+        setPhase("unsupported");
+        setMessage("This capture needs WebGPU. Try Safari 26+ or a recent Chromium browser, with hardware acceleration enabled. Use HTTPS or localhost.");
+        return;
+      }
+      try {
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!active) return;
+        if (!adapter) throw new Error("No WebGPU adapter is available. Enable hardware acceleration, then retry.");
+        renderer = new THREE.WebGPURenderer({ antialias: false, alpha: false });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, matchMedia("(pointer: coarse)").matches ? 1.5 : 2));
+        await renderer.init();
+        if (!active) { renderer.dispose(); return; }
+        if (!("isWebGPUBackend" in renderer.backend) || renderer.backend.isWebGPUBackend !== true) throw new Error("A WebGPU device could not start. Try a supported browser with hardware acceleration enabled.");
+        renderer.onDeviceLost = () => {
+          if (!active) return;
+          renderer?.setAnimationLoop(null);
+          fly?.dispose();
+          setPhase("error");
+          setMessage("The GPU connection was interrupted. Reload the capture to continue.");
+        };
+        const canvas = renderer.domElement;
+        canvas.tabIndex = 0;
+        canvas.setAttribute("aria-label", "Cave lion 3D scan. WASD to move, Q and E for height, arrow keys or mouse to look. Press Escape to release the mouse.");
+        container!.appendChild(canvas);
+        const resize = () => {
+          if (!renderer) return;
+          const width = container!.clientWidth;
+          const height = container!.clientHeight;
+          camera.aspect = width / height;
+          // Preserve the subject's horizontal framing on narrow touch screens.
+          camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(25)) * Math.max(1, 0.8 / camera.aspect)));
+          camera.updateProjectionMatrix();
+          renderer.setSize(width, height);
+        };
+        resizeObserver = new ResizeObserver(resize);
+        resizeObserver.observe(container!);
+        resize();
+        const response = await fetch(SPZ_URL, { signal: request.signal });
+        if (!response.ok) throw new Error(`The scan could not load (HTTP ${response.status}). Check SPZ_URL and try again.`);
+        const buffer = await response.arrayBuffer();
+        if (!active) return;
+        geometry = await new SPZLoader().parse(buffer);
+        if (!active) { geometry.dispose(); return; }
+        if (!geometry.getAttribute("position")?.count) throw new Error("This scan is empty. Choose a non-empty SPZ capture.");
+        splats = new GaussianSplat(geometry);
+        splats.rotation.set(...SCAN_ROTATION);
+        scene.add(splats, ...markers);
+        fly = connectControls({ camera, canvas, onPick: pick, onLock: setLocked, onLockError: () => setLockError(true) });
+        controls.current = fly;
+        let previousTime = performance.now();
+        const animate = (time: number) => {
+          if (!active || !renderer) return;
+          const delta = Math.min((time - previousTime) / 1000, 0.05);
+          previousTime = time;
+          fly?.update(delta);
+          for (const marker of markers) marker.quaternion.copy(camera.quaternion);
+          renderer.render(scene, camera);
+        };
+        renderer.setAnimationLoop(animate);
+        const visibility = () => {
+          if (document.hidden) renderer?.setAnimationLoop(null);
+          else { previousTime = performance.now(); renderer?.setAnimationLoop(animate); }
+        };
+        document.addEventListener("visibilitychange", visibility);
+        removeVisibility = () => document.removeEventListener("visibilitychange", visibility);
+        if (process.env.NODE_ENV === "development") {
+          Object.defineProperty(window, "__splatWalk", { configurable: true, get: () => ({
+            revision: THREE.REVISION,
+            backend: "WebGPU",
+            camera: camera.position.toArray(),
+            rotation: camera.rotation.toArray(),
+            splatCount: geometry?.getAttribute("position").count,
+            lastPick,
+            hotspots: positions.map((position, index) => {
+              const screen = position.clone().project(camera);
+              return { index, x: (screen.x + 1) / 2 * canvas.clientWidth, y: (1 - screen.y) / 2 * canvas.clientHeight };
+            }),
+          }) });
+        }
+        setPhase("ready");
+        setHint(true);
+      } catch (error) {
+        if (!active) return;
+        release();
+        setPhase("error");
+        setMessage(error instanceof Error ? error.message : "The capture could not open. Please retry.");
+      }
+    }
+    void start();
+    return () => {
+      active = false;
+      release();
+      if (process.env.NODE_ENV === "development") Reflect.deleteProperty(window, "__splatWalk");
+    };
+  }, [attempt, connectControls]);
+
+  const closeCard = () => { setSelected(null); host.current?.querySelector("canvas")?.focus({ preventScroll: true }); };
+  return <>
+    <div ref={host} className="absolute inset-0" data-phase={phase} />
+    <header className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4 p-5 sm:p-8">
+      <div className="rounded-lg bg-canvas p-3">
+        <h1 className="text-xl font-medium">Splat Walk<span className="ml-3 text-subtle">/ Cave lion</span></h1>
+        <p className="mt-1 text-sm text-subtle">A captured world, up close.</p>
+      </div>
+      {phase === "ready" && <div className="pointer-events-auto flex gap-2">
+        <button className="hud-button" onClick={() => { controls.current?.reset(); setSelected(null); }} aria-label="Reset camera">Reset</button>
+        <button className="hud-button hidden sm:block" onClick={() => { setSelected(null); setLockError(false); void controls.current?.lock(); }}>Explore</button>
+      </div>}
+    </header>
+
+    {phase !== "ready" && <div className="absolute inset-0 grid place-items-center p-6">
+      <section className="max-w-md rounded-xl bg-panel p-6" role="status" aria-live="polite">
+        <h2 className="mb-3 text-xl">{phase === "loading" ? "Loading the scan" : phase === "unsupported" ? "WebGPU required" : "Let's try that again"}</h2>
+        <p className="text-base leading-relaxed text-subtle">{message}</p>
+        {phase !== "loading" && <button className="hud-button mt-4 border border-line" onClick={() => setAttempt((value) => value + 1)}>Reload capture</button>}
+      </section>
+    </div>}
+
+    {phase === "ready" && <>
+      {locked && <div className="pointer-events-none absolute inset-0 grid place-items-center" aria-hidden="true"><span className="h-2 w-2 rounded-full border border-ink" /></div>}
+      {selected === null && <div className={`hint pointer-events-none absolute inset-x-5 top-32 mx-auto max-w-lg rounded-lg bg-panel p-4 text-center text-sm text-subtle ${hint || lockError ? "opacity-100" : "opacity-0"}`} aria-hidden={!hint && !lockError}>
+        <p className="desktop-hint">Click to explore · WASD move · Q/E height<br />Mouse or arrows look · Esc releases · Click a ring for details</p>
+        <p className="touch-hint">Drag left to move · Drag right to look<br />Tap a ring to discover a detail</p>
+        {lockError && <p className="mt-2 text-ink">Mouse capture was unavailable. Drag to look, or try Explore again.</p>}
+      </div>}
+      {selected !== null && <section aria-labelledby="hotspot-title" role="dialog" aria-modal="false" onKeyDown={(event) => { if (event.key === "Escape") closeCard(); }} className="absolute inset-x-5 bottom-52 max-h-64 overflow-auto rounded-xl bg-panel p-5 sm:inset-x-auto sm:right-8 sm:bottom-32 sm:w-80">
+        <div className="flex items-start justify-between gap-3">
+          <h2 id="hotspot-title" className="pt-2 text-xl font-medium">{HOTSPOTS[selected].label}</h2>
+          <button ref={cardClose} className="hud-button" onClick={closeCard} aria-label="Close detail">Close</button>
+        </div>
+        <p className="mt-3 text-base leading-relaxed text-subtle">{HOTSPOTS[selected].description}</p>
+      </section>}
+      <nav aria-label="Scan details" className="absolute inset-x-5 bottom-24 flex flex-wrap gap-2 sm:inset-x-8 sm:bottom-20">
+        {HOTSPOTS.map((hotspot, index) => <button key={hotspot.label} className={`hud-button text-sm ${selected === index ? "border border-accent" : "border border-transparent"}`} aria-pressed={selected === index} onClick={() => setSelected(index)}>{hotspot.label}</button>)}
+        <button className="hud-button text-sm" onClick={() => setHint((value) => !value)} aria-label="Show controls">Controls</button>
+      </nav>
+    </>}
+    <footer className="pointer-events-none absolute inset-x-5 bottom-4 flex flex-wrap items-end justify-between gap-2 text-xs text-subtle sm:inset-x-8 sm:bottom-6">
+      <p className="rounded bg-canvas px-2 py-1">three.js r186 native WebGPU splats</p>
+      <p className="pointer-events-auto max-w-72 rounded bg-canvas px-2 py-1">Lion: <a className="underline" href="https://superspl.at/scene/56155c3f" target="_blank" rel="noreferrer">Renaud / Joanna Kobierska</a> · <a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a></p>
+    </footer>
+  </>;
+}

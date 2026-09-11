@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #111411;
+  --color-panel: #1e241e;
+  --color-ink: #f0f2e9;
+  --color-subtle: #b9c2b5;
+  --color-accent: #d8e5b0;
+  --color-line: #67715f;
+  --font-sans: Arial, Helvetica, sans-serif;
+}
+:root { color-scheme: dark; }
+body { margin: 0; background: var(--color-canvas); color: var(--color-ink); }
+button, a { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), a { cursor: pointer; }
+button:focus-visible, a:focus-visible, canvas:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
+canvas { display: block; touch-action: none; }
+.hud-button { min-height: 44px; border-radius: 8px; padding: 8px 12px; background: var(--color-panel); color: var(--color-ink); }
+.hud-button:hover { background: var(--color-line); }
+.hud-button:disabled { opacity: .5; cursor: default; }
+.hint { transition: opacity 300ms ease; }
+@media (prefers-reduced-motion: reduce) { .hint { transition: none; } }
+@media (pointer: coarse) { .desktop-hint { display: none; } }
+@media (pointer: fine) { .touch-hint { display: none; } }
