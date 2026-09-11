@@ -13,6 +13,7 @@ export default function SplatScene() {
   const host = useRef<HTMLDivElement>(null);
   const controls = useRef<FlyControls | null>(null);
   const cardClose = useRef<HTMLButtonElement>(null);
+  const selectedRef = useRef<number | null>(null);
   const connectControls = useFlyControls();
   const [phase, setPhase] = useState<Phase>("loading");
   const [message, setMessage] = useState("Preparing WebGPU…");
@@ -30,7 +31,7 @@ export default function SplatScene() {
     return () => window.clearTimeout(timer);
   }, [phase, hint]);
 
-  useEffect(() => { if (selected !== null) cardClose.current?.focus({ preventScroll: true }); }, [selected]);
+  useEffect(() => { selectedRef.current = selected; if (selected !== null) cardClose.current?.focus({ preventScroll: true }); }, [selected]);
 
   useEffect(() => {
     const container = host.current;
@@ -51,10 +52,10 @@ export default function SplatScene() {
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     const positions = HOTSPOTS.map((hotspot) => new THREE.Vector3(...hotspot.position));
-    const markerGeometry = new THREE.RingGeometry(0.55, 1, 32);
-    const markerMaterial = new THREE.MeshBasicMaterial({ color: "#d8e5b0", side: THREE.DoubleSide, depthTest: false, transparent: true, toneMapped: false });
+    const markerGeometry = new THREE.RingGeometry(0.55, 1, 40);
+    const markerMaterials = positions.map(() => new THREE.MeshBasicMaterial({ color: "#dcebb1", side: THREE.DoubleSide, depthTest: false, transparent: true, opacity: 0.82, toneMapped: false }));
     const markers = positions.map((position, index) => {
-      const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+      const marker = new THREE.Mesh(markerGeometry, markerMaterials[index]);
       marker.position.copy(position);
       marker.scale.setScalar(MARKER_SIZE);
       marker.userData.hotspotIndex = index;
@@ -106,7 +107,7 @@ export default function SplatScene() {
       splats?.material.dispose();
       geometry?.dispose();
       markerGeometry.dispose();
-      markerMaterial.dispose();
+      markerMaterials.forEach((material) => material.dispose());
       renderer?.dispose();
       renderer?.domElement.remove();
     };
@@ -127,6 +128,7 @@ export default function SplatScene() {
         if (!active) return;
         if (!adapter) throw new Error("No WebGPU adapter is available. Enable hardware acceleration, then retry.");
         const coarsePointer = matchMedia("(pointer: coarse)").matches;
+        const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
         renderer = new THREE.WebGPURenderer({ antialias: false, alpha: false });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarsePointer ? 1.5 : 2));
         await renderer.init();
@@ -210,7 +212,13 @@ export default function SplatScene() {
           const delta = Math.min((time - previousTime) / 1000, 0.05);
           previousTime = time;
           fly?.update(delta);
-          for (const marker of markers) marker.quaternion.copy(camera.quaternion);
+          markers.forEach((marker, index) => {
+            marker.quaternion.copy(camera.quaternion);
+            const activeMarker = selectedRef.current === index;
+            const wave = reduceMotion ? 0 : Math.sin(time * 0.0022 + index * 1.9);
+            marker.scale.setScalar(MARKER_SIZE * (activeMarker ? 1.13 : 1) * (1 + wave * 0.055));
+            markerMaterials[index].opacity = activeMarker ? 1 : reduceMotion ? 0.82 : 0.78 + wave * 0.12;
+          });
           renderer.render(scene, camera);
         };
         renderer.setAnimationLoop(animate);
@@ -255,6 +263,7 @@ export default function SplatScene() {
   const closeCard = () => { setSelected(null); host.current?.querySelector("canvas")?.focus({ preventScroll: true }); };
   return <>
     <div ref={host} className={`scene-surface absolute inset-0 ${sceneVisible ? "scene-visible" : ""}`} data-phase={phase} />
+    <div className="scene-atmosphere pointer-events-none absolute inset-0" aria-hidden="true" />
     <header className="scene-header pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4">
       <div className="scene-title-panel rounded-lg bg-canvas">
         <h1 className="scene-heading font-medium">Splat Walk<span className="scene-name text-subtle">/ Cave lion</span></h1>
@@ -262,7 +271,7 @@ export default function SplatScene() {
       </div>
       {phase === "ready" && <div className="scene-actions pointer-events-auto flex gap-2">
         <button className="hud-button" onClick={() => { controls.current?.reset(); setSelected(null); }} aria-label="Reset camera">Reset</button>
-        <button className="hud-button desktop-explore" onClick={() => { setSelected(null); setLockError(false); void controls.current?.lock(); }}>Explore</button>
+        <button className="hud-button desktop-explore primary-action" onClick={() => { setSelected(null); setLockError(false); void controls.current?.lock(); }}>Explore</button>
       </div>}
     </header>
 
@@ -281,7 +290,7 @@ export default function SplatScene() {
     </div>}
 
     {phase === "ready" && <>
-      {locked && <div className="pointer-events-none absolute inset-0 grid place-items-center" aria-hidden="true"><span className="h-2 w-2 rounded-full border border-ink" /></div>}
+      {locked && <div className="pointer-events-none absolute inset-0 grid place-items-center" aria-hidden="true"><span className="scene-crosshair" /></div>}
       {selected === null && <div className={`scan-hint hint pointer-events-none absolute mx-auto rounded-lg bg-panel text-center text-sm text-subtle ${hint || lockError ? "opacity-100" : "opacity-0"}`} aria-hidden={!hint && !lockError}>
         <p className="desktop-hint">Click to explore · WASD move · Q/E height<br />Mouse or arrows look · Esc releases · Click a ring for details</p>
         <p className="touch-hint">Drag left to move · Drag right to look<br />Tap a ring to discover a detail</p>
@@ -290,13 +299,13 @@ export default function SplatScene() {
       {selected !== null && <section aria-labelledby="hotspot-title" role="dialog" aria-modal="false" onKeyDown={(event) => { if (event.key === "Escape") closeCard(); }} className="detail-card absolute overflow-auto rounded-xl bg-panel">
         <div className="flex items-start justify-between gap-3">
           <h2 id="hotspot-title" className="detail-title font-medium">{HOTSPOTS[selected].label}</h2>
-          <button ref={cardClose} className="hud-button" onClick={closeCard} aria-label="Close detail">Close</button>
+          <button ref={cardClose} className="hud-button detail-close" onClick={closeCard} aria-label="Close detail">Close</button>
         </div>
         <p className="detail-copy text-subtle">{HOTSPOTS[selected].description}</p>
       </section>}
       <nav aria-label="Scan details" className="detail-nav absolute">
-        {HOTSPOTS.map((hotspot, index) => <button key={hotspot.label} className={`hud-button text-sm ${selected === index ? "border border-accent" : "border border-transparent"}`} aria-pressed={selected === index} onClick={() => setSelected(index)}>{hotspot.label}</button>)}
-        <button className="hud-button text-sm" onClick={() => setHint((value) => !value)} aria-label="Show controls">Controls</button>
+        {HOTSPOTS.map((hotspot, index) => <button key={hotspot.label} className={`hud-button detail-button text-sm ${selected === index ? "is-selected" : ""}`} aria-pressed={selected === index} onClick={() => setSelected(index)}>{hotspot.label}</button>)}
+        <button className="hud-button detail-button controls-button text-sm" onClick={() => setHint((value) => !value)} aria-label="Show controls">Controls</button>
       </nav>
     </>}
     <footer className="scene-footer pointer-events-none absolute text-xs text-subtle">
