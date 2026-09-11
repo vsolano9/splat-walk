@@ -7,7 +7,7 @@ import { SPZLoader } from "three/addons/loaders/SPZLoader.js";
 import { createFlyControls, type FlyControls } from "@/lib/controls";
 import { HOTSPOTS, HOTSPOT_RADIUS, LOOK_AT, MARKER_SIZE, SCAN_ROTATION, SPAWN_POSITION, SPZ_URL } from "@/lib/scene.config";
 
-type Phase = "loading" | "ready" | "unsupported" | "error";
+type Phase = "loading" | "ready" | "unsupported" | "unavailable" | "error";
 
 export default function SplatScene() {
   const host = useRef<HTMLDivElement>(null);
@@ -189,14 +189,20 @@ export default function SplatScene() {
       setLockError(false);
       setLocked(false);
       if (!navigator.gpu) {
+        release();
         setPhase("unsupported");
-        setMessage("This capture needs WebGPU. Try Safari 26+ or a recent Chromium browser, with hardware acceleration enabled. Use HTTPS or localhost.");
+        setMessage("This capture needs WebGPU. Use a supported browser on HTTPS or localhost, with graphics acceleration available.");
         return;
       }
       try {
         const adapter = await navigator.gpu.requestAdapter();
         if (!active) return;
-        if (!adapter) throw new Error("No WebGPU adapter is available. Enable hardware acceleration, then retry.");
+        if (!adapter) {
+          release();
+          setPhase("unavailable");
+          setMessage("WebGPU is present, but this browser could not access a graphics adapter. Check your browser's graphics settings or try another supported browser, then retry.");
+          return;
+        }
         const coarsePointer = matchMedia("(pointer: coarse)").matches;
         const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
         renderer = new THREE.WebGPURenderer({ antialias: false, alpha: false });
@@ -349,7 +355,12 @@ export default function SplatScene() {
         }
         setPhase("ready");
         setHint(true);
-        window.requestAnimationFrame(() => { if (active && !disposed) setSceneVisible(true); });
+        window.requestAnimationFrame(() => {
+          if (!active || disposed) return;
+          setSceneVisible(true);
+          // A retry removes its focused button. Restore keyboard access without stealing focus.
+          if (attempt > 0 && document.activeElement === document.body) canvas.focus({ preventScroll: true });
+        });
       } catch (error) {
         if (!active || disposed) return;
         release();
@@ -420,8 +431,7 @@ export default function SplatScene() {
             controls.current?.reset();
             closeCard(host.current?.querySelector("canvas") ?? null);
           }}
-          aria-label="Reset camera"
-        >{resetting ? "Resetting" : "Reset"}</button>
+        >{resetting ? "Resetting…" : "Reset view"}</button>
         <button className="hud-button desktop-explore primary-action" onClick={() => {
           closeCard(host.current?.querySelector("canvas") ?? null);
           setLockError(false);
@@ -432,7 +442,7 @@ export default function SplatScene() {
 
     {phase !== "ready" && <div className="loading-shell absolute inset-0 grid place-items-center p-6">
       <section className="loading-card max-w-md rounded-xl bg-panel p-6" role="status" aria-live="polite">
-        <h2 className="mb-3 text-xl">{phase === "loading" ? "Loading the scan" : phase === "unsupported" ? "WebGPU required" : "Let's try that again"}</h2>
+        <h2 className="mb-3 text-xl">{phase === "loading" ? "Loading the scan" : phase === "unsupported" ? "WebGPU required" : phase === "unavailable" ? "WebGPU unavailable" : "Let's try that again"}</h2>
         <p className="text-base leading-relaxed text-subtle">{message}</p>
         {phase === "loading" && <div className="loading-progress-wrap mt-5">
           <div className={`loading-track ${loadProgress === null ? "loading-indeterminate" : ""}`} role="progressbar" aria-label="Scan loading progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={loadProgress ?? undefined}>
