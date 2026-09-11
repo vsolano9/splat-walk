@@ -267,7 +267,7 @@ canvas { display: block; touch-action: none; }
   .scene-header { padding: .8rem 1rem; }
   .scene-title-panel { padding: .5rem .7rem; }
   .scene-tagline { margin-top: .12rem; font-size: .72rem; }
-  .scan-hint { inset-inline: auto; left: 1rem; top: 10rem; max-width: 19rem; transform: none; padding: .65rem .75rem; font-size: .875rem; line-height: 1.55; text-align: left; }
+  .scan-hint { inset-inline: auto; left: 1rem; top: 10rem; max-width: 19rem; transform: none; padding: .65rem .75rem; text-align: left; }
   .hotspot-label { left: 1rem; bottom: 4.2rem; transform: none; animation: none; }
   .detail-card { left: auto; right: 1rem; bottom: 4.75rem; width: min(20rem, 44vw); max-height: 11rem; padding: 1rem; }
   .detail-copy { margin-top: .5rem; font-size: .875rem; line-height: 1.45; }
