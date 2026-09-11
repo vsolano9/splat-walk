@@ -9,3 +9,12 @@ Switching from Face to face to Surface detail moved focus to Close detail; Escap
 Clicking empty canvas while detail was open closed it and focused CANVAS.
 Reset closed detail and focused CANVAS.
 No tested close path left focus on BODY.
+
+ChatGPT review regression case added 2026-09-11:
+1. Open Face to face from its dock button.
+2. Click the already-selected Face to face dock button again so focus remains on the dock outside the detail dialog.
+3. Press Escape.
+Expected: the detail closes and focus returns to Face to face, found.
+Implementation: the page keyboard capture boundary delegates Escape to the existing Close detail action, reusing its focus-restoration path, and does not intercept Escape while pointer lock is active.
+Automated/remote verification: the review-fix code built successfully on Vercel and its preview root returned HTTP 200.
+Interactive browser replay of this newly added regression case remains pending local QA after pulling the review-fix branch; it is intentionally not marked as passed here.
