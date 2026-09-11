@@ -1,0 +1,51 @@
+SPZ request log — AFTER fix
+Date: 2026-09-11
+Code under test: branch fix/spz-single-fetch (HEAD probe removed; Content-Length read from the GET)
+
+Environments used:
+  A) Chrome for Testing 152.0.7977.75, headed window 1440x900 (dpr 2), throwaway profile,
+     --enable-unsafe-webgpu, driven over raw CDP on 127.0.0.1:9333, browser cache disabled.
+     This is the primary record.
+  B) Chrome 152 (Victor's Default profile via the TCV browser relay, background tab) — corroborating.
+  Server in both: local production build (npm run build && npm start) on http://localhost:3000.
+
+RESULT: exactly 1 request for /scenes/lion.v3.spz per load — 1 GET, no HEAD, no aborted request.
+
+A) Headed Chrome for Testing 152 — CDP Network events (ms from capture start):
+  {"ev":"requestWillBeSent","id":"69486.56","method":"GET","ms":136}
+  {"ev":"responseReceived","id":"69486.56","method":"GET","status":200,"contentLength":"4303196","fromDiskCache":false,"ms":139}
+  {"ev":"loadingFinished","id":"69486.56","method":"GET","encodedDataLength":4303514,"ms":259}
+
+   Resource Timing entries for lion.v3.spz (in-page):
+  {"initiator":"fetch","transferSize":4303496,"encodedBodySize":4303196,"start":132}
+   Final phase: ready; HUD: 0 / 3 found; canvas present: true; scene faded in: true
+   Phase transitions: loading -> ready
+   Console/log/page-error messages: 0
+   Screenshot: after-fix-ready-1440x900.png
+
+B) Relay Chrome 152 (background tab, cache disabled) — CDP Network events:
+  {"ev":"requestWillBeSent","id":"61421.74","method":"GET","ms":260}
+  {"ev":"responseReceived","id":"61421.74","method":"GET","status":200,"contentLength":"4303196","fromDiskCache":false,"ms":266}
+  {"ev":"loadingFinished","id":"61421.74","method":"GET","encodedDataLength":4303514,"ms":731}
+   Final phase: ready; HUD: 0 / 3 found; canvas present: true; console messages: 0
+   (A warm-cache reload in the same tab also showed a single GET, served from cache.)
+
+Progress bar still reports real percentages from the single GET
+  Same build, CDP network throttling at 1.5 Mbit/s, aria-valuenow sampled every 40 ms:
+    distinct values seen: 101
+    first samples: ["indeterminate","0","1","2","3","4","5","6"]
+    last samples:  ["96","97","98","99"]
+    end state: phase=ready, HUD=0 / 3 found
+  The bar is indeterminate until response headers arrive, then counts 0 -> 99 and completes:
+  Content-Length from the GET drives progress exactly as the HEAD used to.
+
+Interaction re-check after the fix (headed Chrome, real CDP mouse/key input, 1440x900)
+  click dock button 0   -> detail open (data-hotspot-detail="0", title "Face to face"),
+                           document.activeElement = button[aria-label="Close detail"] inside the dialog,
+                           HUD "1 / 3 found"    [after-fix-detail-open.png]
+  click "Close detail"  -> dialog removed, focus back on a BUTTON, dock label now
+                           "Face to face, found", HUD still "1 / 3 found"
+  click "Reset camera"  -> data-resetting="true" and label "Resetting" mid-tween, then back to
+                           "Reset" with data-resetting cleared, phase still "ready"
+  hold W (real keys)    -> camera moves; framing changes in after-fix-moved-forward.png
+  Console/page errors across the interaction pass: 0

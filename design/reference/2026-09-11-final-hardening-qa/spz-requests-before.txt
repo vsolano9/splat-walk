@@ -1,0 +1,57 @@
+SPZ request log — BEFORE fix
+Date: 2026-09-11
+Code under test: main @ 0ccea82 (branch fix/spz-single-fetch with the fix stashed out, rebuilt)
+
+Environments used:
+  A) Chrome for Testing 152.0.7977.75, headed window 1440x900 (dpr 2), throwaway profile,
+     --enable-unsafe-webgpu, driven over raw CDP on 127.0.0.1:9333, browser cache disabled.
+     This is the primary record.
+  B) Chrome 152 (Victor's Default profile via the TCV browser relay, background tab) — corroborating.
+  Server in both: local production build (npm run build && npm start) on http://localhost:3000.
+
+RESULT: 2 requests for /scenes/lion.v3.spz per load — 1 HEAD + 1 GET — and Chrome reports
+        net::ERR_ABORTED (canceled: true) for the HEAD.
+
+A) Headed Chrome for Testing 152 — CDP Network events (ms from capture start):
+  {"ev":"requestWillBeSent","id":"69486.37","method":"HEAD","ms":135}
+  {"ev":"responseReceived","id":"69486.37","method":"HEAD","status":200,"contentLength":"4303196","fromDiskCache":false,"ms":138}
+  {"ev":"requestWillBeSent","id":"69486.38","method":"GET","ms":138}
+  {"ev":"loadingFailed","id":"69486.37","method":"HEAD","errorText":"net::ERR_ABORTED","canceled":true,"ms":138}
+  {"ev":"responseReceived","id":"69486.38","method":"GET","status":200,"contentLength":"4303196","fromDiskCache":false,"ms":139}
+  {"ev":"loadingFinished","id":"69486.38","method":"GET","encodedDataLength":4303514,"ms":287}
+
+   Resource Timing entries for lion.v3.spz (in-page):
+  {"initiator":"fetch","transferSize":300,"encodedBodySize":0,"start":131}
+  {"initiator":"fetch","transferSize":4303496,"encodedBodySize":4303196,"start":133}
+   Final phase: ready; HUD: 0 / 3 found; canvas present: true
+   Phase transitions: loading -> ready
+   Console/log/page-error messages: 0
+
+B) Relay Chrome 152 (background tab, warm cache) — CDP Network events:
+  {"ev":"requestWillBeSent","id":"61421.19","method":"HEAD","ms":553}
+  {"ev":"responseReceived","id":"61421.19","method":"HEAD","status":200,"ms":556}
+  {"ev":"requestWillBeSent","id":"61421.20","method":"GET","ms":556}
+  {"ev":"loadingFailed","id":"61421.19","method":"HEAD","errorText":"net::ERR_ABORTED","canceled":true,"ms":557}
+  {"ev":"responseReceived","id":"61421.20","method":"GET","status":200,"ms":566}
+  {"ev":"loadingFinished","id":"61421.20","method":"GET","encodedDataLength":4303514,"ms":1017}
+
+   Resource Timing entries for lion.v3.spz (in-page):
+  {"encodedBodySize":0,"initiator":"fetch","start":545,"transferSize":300}
+  {"encodedBodySize":4303196,"initiator":"fetch","start":548,"transferSize":4303496}
+   Final phase: ready; console messages: 0
+
+ROOT CAUSE (corrects the earlier handoff note)
+  The aborted request is the HEAD, not a second GET, and the scene effect runs exactly once per
+  load: only one HEAD and one GET are ever issued. `useFlyControls()` already returned
+  useCallback(fn, []), so the `connectControls` entry in the effect's dependency array was stable
+  and never caused a teardown/restart.
+  The HEAD existed only to read Content-Length for the progress bar. Its response body stream is
+  never consumed, so Chrome cancels the request as soon as the following GET starts and logs
+  net::ERR_ABORTED against it.
+
+The HEAD carried no information the GET response does not already carry:
+  local production build:          HEAD 200 Content-Length 4303196  |  GET 200 Content-Length 4303196
+  live, Accept-Encoding: br:       HEAD 200 no content-length       |  GET 200 no content-length
+  live, Accept-Encoding: identity: HEAD 200 Content-Length 4303196  |  GET 200 Content-Length 4303196
+  On the live site (brotli) the HEAD never yielded a length at all, so the bar was already
+  indeterminate there and the extra round trip bought nothing.
