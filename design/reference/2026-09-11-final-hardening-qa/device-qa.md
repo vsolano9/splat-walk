@@ -99,3 +99,46 @@ design/reference/2026-09-11-final-hardening-qa/
 
 Other files in this directory (`after-fix-*`, `device-loss-*`, `regression-*`, `spz-requests-*`,
 `device-loss-and-pointer-lock.md`) belong to the `SplatWalkSpzFix` lane, not to this report.
+
+---
+
+## 5. Physical iPhone 12 Pro (added 2026-09-11, lane `SplatWalkIphoneQA`)
+
+Rows **3.1–3.3** above are **superseded**: the phone was unlocked later the same day and a real
+handheld pass was obtained against the same live production build (`main` @ `0ccea82`).
+Full matrix, findings and caveats: **`iphone-12-pro/iphone-qa.md`**.
+
+Device: iPhone 12 Pro (`iPhone13,3`), **iOS 26.6.1**, Safari
+`Version/26.6.1 Mobile/15E148`, layout viewport **390 × 699** CSS px at `devicePixelRatio` 3.
+
+Capture method — `xcrun devicectl device process launch --payload-url …` to open the URL in
+mobile Safari (now permitted, the device being unlocked); **macOS iPhone Mirroring** screenshotted
+and driven through the OS-level `computer` facade for **real taps and single-finger drags**; and
+**macOS Safari Web Inspector** attached over USB for DOM, console and network truth.
+`devicectl` has **no** `screenshot` subcommand, and `devicectl device orientation` is
+unsupported on `iPhone13,3`.
+
+| # | Check | Result | Evidence (`iphone-12-pro/`) |
+|---|---|---|---|
+| 5.1 | Loading state + progress bar | PASS — "Loading the scan" / "Streaming the capture…" / filled bar / "Connecting to capture" | `02-loading-progress.png` |
+| 5.2 | Reaches `ready`, lion + 3 rings, `0 / 3 found`; **no** unsupported/retry card | PASS — `navigator.gpu` **true** on real iOS 26 Safari, `data-phase="ready"` | `01-ready-portrait.png`, `13-inspector-console-probe.png` |
+| 5.3 | Portrait layout, no overlaps | PASS — on-device rects in 390 × 699: header 0–101, hint 102–162, dock 595–646, footer 670–691 | `12-inspector-elements-390x699.png`, `03-ready-controls-hint.png` |
+| 5.4 | Touch Controls hint copy | PASS — "Drag left to move · Drag right to look" / "Move near a ring to reveal it · Tap to discover", on load and via the dock `Controls` button | `03-ready-controls-hint.png`, `18-controls-hint-toggled.png` |
+| 5.5 | Real tap on a hotspot ring → bottom sheet + Close; counter `1/3` | PASS — sheet "Face to face" with focused `Close`, counter `0 / 3` → `1 / 3`, dock `✓ Face to face`; `Close` dismisses and state persists | `04-detail-sheet-open.png`, `05-detail-closed.png` |
+| 5.6 | Real left-half drag moves, right-half drag looks | PASS — camera advanced; view yawed so the lion swung to the right edge | `06-touch-move.png`, `07-touch-look.png` |
+| 5.7 | Landscape / short-landscape layout | **NOT CAPTURED** — `Device Orientation` unsupported on `iPhone13,3`, iPhone Mirroring is portrait-only with no rotate control, and the only remaining route (AssistiveTouch ▸ Rotate Screen) means changing an accessibility setting on a personal phone, which was not authorised in this window. No landscape claim is made. | — |
+| 5.8 | `Reset` returns to spawn | PASS — spawn framing restored after the move+look excursion | `08-after-reset.png` |
+| 5.9 | Background (Home) and return | PASS — still `ready`, spawn framing and counter intact, and a further drag still moves the camera, so it is live rather than a stale frame; also survived a ~4-minute background trip | `09-resume-after-background.png`, `10-resume-still-live.png` |
+| 5.10 | Console errors | PASS — **zero** messages (no errors, warnings or logs) across a full device reload with the inspector attached | `14-inspector-console-clean-after-reload.png`, `15-inspector-state-after-reload.png` |
+| 5.11 | SPZ request shape on device (bonus) | PASS — `/scenes/lion.v3.spz` body downloaded **once**: `HEAD 200` (193 B, `enc=0`) then the 4.31 MB payload (`enc=4305581`, 851 ms) | `16-inspector-network-spz.png`, `17-inspector-network-spz-head.png`, `19-inspector-resource-timing-spz.png` |
+
+New finding **P1 (Info, product question)**: `Reset` restores the spawn pose but does **not** clear
+discoveries — the counter stayed `1 / 3 found` and the dock kept `✓ Face to face` across a Reset.
+Defensible as a camera reset; decide whether the label should be `Reset view`.
+No other defect was found on real hardware.
+
+Finding **F3** (no-WebGPU-adapter copy) is unreachable on this device and remains simulator-only.
+
+Two developer settings were turned on for this pass and **turned back off** afterwards: macOS
+Safari ▸ Advanced ▸ "Show features for web developers", and iPhone ▸ Safari ▸ Advanced ▸
+"Web Inspector".
