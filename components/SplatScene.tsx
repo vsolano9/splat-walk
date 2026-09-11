@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three/webgpu";
 import { GaussianSplat } from "three/addons/objects/GaussianSplat.js";
 import { SPZLoader } from "three/addons/loaders/SPZLoader.js";
-import { useFlyControls, type FlyControls } from "@/lib/controls";
+import { createFlyControls, type FlyControls } from "@/lib/controls";
 import { HOTSPOTS, HOTSPOT_RADIUS, LOOK_AT, MARKER_SIZE, SCAN_ROTATION, SPAWN_POSITION, SPZ_URL } from "@/lib/scene.config";
 
 type Phase = "loading" | "ready" | "unsupported" | "error";
@@ -17,7 +17,6 @@ export default function SplatScene() {
   const selectedRef = useRef<number | null>(null);
   const targetedRef = useRef<number | null>(null);
   const visitedRef = useRef<ReadonlySet<number>>(new Set());
-  const connectControls = useFlyControls();
   const [phase, setPhase] = useState<Phase>("loading");
   const [message, setMessage] = useState("Preparing WebGPU…");
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
@@ -47,6 +46,8 @@ export default function SplatScene() {
     const container = host.current;
     if (!container) return;
     let active = true;
+    // Set by release(): a device that disappears because we tore it down is not a GPU fault.
+    let disposed = false;
     let renderer: THREE.WebGPURenderer | undefined;
     let splats: GaussianSplat | undefined;
     let geometry: THREE.BufferGeometry | undefined;
@@ -159,6 +160,7 @@ export default function SplatScene() {
       return false;
     };
     const release = () => {
+      disposed = true;
       request.abort();
       removeVisibility?.();
       resizeObserver?.disconnect();
@@ -200,13 +202,26 @@ export default function SplatScene() {
         await renderer.init();
         if (!active) { renderer.dispose(); return; }
         if (!("isWebGPUBackend" in renderer.backend) || renderer.backend.isWebGPUBackend !== true) throw new Error("A WebGPU device could not start. Try a supported browser with hardware acceleration enabled.");
-        renderer.onDeviceLost = () => {
-          if (!active) return;
+        // A device can vanish for reasons three.js forwards (driver reset, GPU process crash) and
+        // for one it deliberately swallows: an explicit destroy(). Report every loss we did not
+        // cause, exactly once, so the canvas never freezes with no way back.
+        let reportedLoss = false;
+        const reportDeviceLoss = () => {
+          if (!active || disposed || reportedLoss) return;
+          reportedLoss = true;
           renderer?.setAnimationLoop(null);
           fly?.dispose();
           setPhase("error");
           setMessage("The GPU connection was interrupted. Reload the capture to continue.");
         };
+        renderer.onDeviceLost = reportDeviceLoss;
+        // three.js keeps the device out of its public backend surface, and its `lost` promise is the
+        // only loss signal that also covers a destroyed device, which WebGPUBackend returns early on.
+        const backend: unknown = renderer.backend;
+        const device: unknown = backend && typeof backend === "object" && "device" in backend ? backend.device : undefined;
+        if (device && typeof device === "object" && "lost" in device && device.lost instanceof Promise) {
+          void device.lost.then(reportDeviceLoss);
+        }
         const canvas = renderer.domElement;
         canvas.tabIndex = 0;
         canvas.setAttribute("aria-label", coarsePointer
@@ -226,18 +241,15 @@ export default function SplatScene() {
         resizeObserver = new ResizeObserver(resize);
         resizeObserver.observe(container!);
         resize();
-        let totalBytes: number | null = null;
-        try {
-          const metadata = await fetch(SPZ_URL, { method: "HEAD", signal: request.signal });
-          const length = Number(metadata.headers.get("content-length"));
-          if (metadata.ok && Number.isFinite(length) && length > 0) totalBytes = length;
-        } catch (error) {
-          if (request.signal.aborted) throw error;
-        }
         setMessage("Streaming the capture…");
-        setLoadProgress(totalBytes ? 0 : null);
         const response = await fetch(SPZ_URL, { signal: request.signal });
         if (!response.ok) throw new Error(`The scan could not load (HTTP ${response.status}). Check SPZ_URL and try again.`);
+        // Progress needs Content-Length from this same response. A separate HEAD probe adds a
+        // second request without adding information: when the transfer is compressed neither
+        // response declares a length, and the bar then stays indeterminate.
+        const declaredBytes = Number(response.headers.get("content-length"));
+        const totalBytes = Number.isFinite(declaredBytes) && declaredBytes > 0 ? declaredBytes : null;
+        setLoadProgress(totalBytes ? 0 : null);
         let buffer: ArrayBuffer;
         if (!response.body) {
           buffer = await response.arrayBuffer();
@@ -270,7 +282,7 @@ export default function SplatScene() {
         splats = new GaussianSplat(geometry);
         splats.rotation.set(...SCAN_ROTATION);
         scene.add(splats, ...markers);
-        fly = connectControls({
+        fly = createFlyControls({
           camera,
           canvas,
           onPick: pick,
@@ -344,7 +356,7 @@ export default function SplatScene() {
       release();
       if (process.env.NODE_ENV === "development") Reflect.deleteProperty(window, "__splatWalk");
     };
-  }, [attempt, connectControls]);
+  }, [attempt]);
 
   const closeCard = (focusTarget: HTMLElement | null = restoreFocusTarget.current) => {
     selectedRef.current = null;
