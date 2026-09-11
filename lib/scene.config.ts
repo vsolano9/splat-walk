@@ -3,7 +3,14 @@ export const SPZ_URL = "/scenes/lion.v3.spz";
 export const SPAWN_POSITION: [number, number, number] = [0, 0.42, 1.2];
 export const LOOK_AT: [number, number, number] = [-0.025, 0.16, 0.05];
 export const SCAN_ROTATION: [number, number, number] = [Math.PI, 0, 0];
-export const MOVE_SPEED = 0.35; // scan units per second; Q down, E up
+// Input tuning is explicit so alternate scans can be calibrated without touching control code.
+export const KEYBOARD_MOVE_SPEED = 0.35; // scan units per second
+export const TOUCH_MOVE_SPEED = 0.32; // scan units per second
+export const MOUSE_LOOK_SENSITIVITY = 0.0018; // radians per pointer pixel
+export const TOUCH_LOOK_SENSITIVITY = 0.0034; // radians per drag pixel
+export const KEYBOARD_LOOK_SPEED = 1.15; // radians per second
+export const TOUCH_MOVE_DRAG_DISTANCE = 60; // pixels to reach full movement speed
+export const CAMERA_RESET_DURATION = 0.4; // seconds
 export const HOTSPOT_RADIUS = 0.16; // maximum distance from a picked splat surface
 export const MARKER_SIZE = 0.023;
 

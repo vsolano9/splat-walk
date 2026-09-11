@@ -1,0 +1,29 @@
+Splat Walk keyboard/focus QA — production build, 1440x900, 2026-09-11
+
+Tab order observed: canvas -> Reset camera -> Explore -> Face to face.
+Focused dock button exposed the matching Face to face label.
+Enter opened the detail and moved focus to Close detail.
+Escape restored focus to Face to face, found.
+Enter on Close detail restored focus to Face to face, found.
+Switching from Face to face to Surface detail moved focus to Close detail; Escape restored focus to Surface detail, found.
+Clicking empty canvas while detail was open closed it and focused CANVAS.
+Reset closed detail and focused CANVAS.
+No tested close path left focus on BODY.
+
+ChatGPT review regression case added 2026-09-11:
+1. Open Face to face from its dock button.
+2. Click the already-selected Face to face dock button again so focus remains on the dock outside the detail dialog.
+3. Press Escape.
+Expected: the detail closes and focus returns to Face to face, found.
+Implementation: the page keyboard capture boundary delegates Escape to the existing Close detail action, reusing its focus-restoration path, and does not intercept Escape while pointer lock is active.
+Automated/remote verification: the review-fix code built successfully on Vercel and its preview root returned HTTP 200.
+
+Local replay 2026-09-11 — PASSED (branch feat/showcase-phase-4-6 @ b9c7020)
+Environment: `npm run build` + `npm start` on http://localhost:3000, Chrome for Testing 152 at 1440x900, real CDP mouse and keyboard input.
+Step (a) clicked the Face to face dock button: detail opened (role=dialog, data-hotspot-detail="0"), activeElement = BUTTON "Close detail" (inside the dialog), dock label became "Face to face, found", progress 1 / 3 found.
+Step (b) clicked the same already-selected dock button again: detail stayed open (1 dialog in the DOM), activeElement = BUTTON "Face to face, found" (data-hotspot-button="0"), dialog.contains(activeElement) = false — the regression precondition reproduced.
+Step (d) pressed Escape.
+Step (e) result: detail removed from the DOM (0 role=dialog nodes, all dock aria-pressed back to false) and activeElement remained BUTTON "Face to face, found" with a visible focus ring.
+Evidence: escape-outside-dialog-before.png, escape-outside-dialog-after.png.
+Pointer-lock guard: clicking Explore in this Chrome did not grant pointer lock (document.pointerLockElement stayed null and the app surfaced "Mouse capture was unavailable"), so the guard was exercised by overriding document.pointerLockElement to the canvas in the page's main world. With the override active, Escape on the dock button left the detail open (a main-world keydown probe recorded pointerLockElement = CANVAS and the detail still open); after removing the override the same Escape closed the detail and kept focus on the dock button. Escape with no detail open changed nothing.
+Console: zero console messages of any level and zero page errors across the replay and the pointer-lock checks.

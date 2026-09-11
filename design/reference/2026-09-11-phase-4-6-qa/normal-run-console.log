@@ -1,0 +1,15 @@
+Splat Walk production browser QA — 2026-09-11
+Server: npm start at http://localhost:3000
+
+Normal load + hover + detail open/close + reset:
+console entries: 0
+page errors: 0
+final phase: ready
+
+Viewport capture runs:
+1440x900 fine pointer: warnings 0, errors 0
+390x844 coarse pointer: warnings 0, errors 0
+320x568 coarse pointer: warnings 0, errors 0
+844x390 coarse pointer: warnings 0, errors 0
+
+Reduced-motion 390x844: warnings 0, errors 0
