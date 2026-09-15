@@ -2,64 +2,87 @@
 
 Last updated: 2026-09-15
 
-## Shipped / implemented
+## Production
 
-Baseline reviewed while writing these docs: `main` at `d6cedaf394dccdc0af33d19e7897a504070f9228`.
+Production `main` is still the previously released free-flight build until PR #6 is merged and the resulting production deployment is verified.
 
-Implemented on that baseline:
+The renderer/recovery baseline remains proven by the historical records under `design/reference/`:
 
 - Next.js + Tailwind single-page WebGPU viewer;
 - three.js r186 native `GaussianSplat` + `SPZLoader`;
 - cave-lion SPZ sample;
 - streamed single-request loading progress;
-- supported / unavailable / load-error states and retry;
+- WebGPU unsupported/unavailable/load-error states and retry;
 - GPU-loss teardown/recovery;
-- free-flight desktop controls with pointer lock, WASD/QE, mouse/arrow look;
-- drag-to-look without pointer lock;
-- split move/look touch controls;
-- reset-to-spawn with reduced-motion behavior;
-- native splat/marker raycast hotspot picking;
-- three session-only discoverable details;
-- accessible DOM HUD/dock/detail controls;
-- responsive desktop/mobile layout;
-- historical desktop/Safari/physical-iPhone QA under `design/reference/`.
+- native Gaussian splat/marker raycast picking;
+- session-only discoveries and accessible DOM HUD;
+- responsive layout and resource cleanup.
 
-## Documented / accepted direction
+## Object-camera candidate
 
-The following is now specified in `docs/` but is **not yet implemented** on the baseline above:
+PR #6, branch `feat/object-camera-exhibit-2026-09-15`, implements the accepted interaction direction documented in this directory.
+
+Implemented on the candidate:
 
 - explicit `object` vs `environment` scene modes;
-- cave lion switched to object mode;
-- subject-centered orbit camera;
-- mouse/trackpad drag orbit;
-- wheel/trackpad dolly zoom;
-- one-finger orbit + pinch zoom;
-- damping and camera constraints;
-- no pointer lock/crosshair in object mode;
-- preserved existing fly controls for environment mode;
-- authored hotspot camera poses;
-- camera/detail-panel recomposition;
+- cave lion configured as `object` mode;
+- a separate subject-centered orbit/dolly controller in `lib/object-controls.ts`;
+- mouse/trackpad drag orbit and wheel/trackpad zoom;
+- one-finger touch orbit and two-finger pinch zoom;
+- keyboard arrow orbit, `+`/`-` zoom and Home overview reset;
+- delta-time-aware damping and authored pitch/radius constraints;
+- no pointer lock/crosshair or WASD requirement in object mode;
+- existing free-flight controller preserved for environment mode;
+- authored camera poses for all three lion hotspots;
+- marker/surface/dock selection converging on the same detail/camera state;
 - Previous/Next guided detail navigation;
-- completion payoff after all three discoveries;
-- optional idle orbit / initial settle after core behavior is correct;
-- new exact-build QA gate for the camera iteration.
+- marker-adjacent projected labels with viewport clamping;
+- `3 / 3` completion acknowledgement with Explore freely / Replay tour;
+- object-mode metadata, accessibility copy and README documentation.
 
-## Documentation branch
+Not implemented because they remain optional polish rather than ship requirements:
 
-Documentation was authored on:
+- idle orbit;
+- decorative initial camera settle;
+- camera panning;
+- double-click/double-tap arbitrary surface focus;
+- generalized UI collision/framing engine.
 
-`docs/object-camera-direction-2026-09-15`
-
-No application source behavior was changed by this documentation pass.
+The hotspot config retains optional framing metadata for later visual tuning, but the current controller uses authored target/yaw/pitch/radius poses only.
 
 ## Verification state
 
-- Existing runtime behavior: previously verified as recorded in `README.md` and `design/reference/`; those records remain tied to their named commits/builds.
-- New object-camera behavior: not tested because it is not implemented yet.
-- Documentation consistency: reviewed against current `README.md`, `components/SplatScene.tsx`, `lib/controls.ts`, `lib/scene.config.ts`, and the existing QA record.
+Completed:
 
-## Next implementation entry point
+- Vercel production-style preview builds compile on Next.js 16.3.4;
+- full `npm run check` passed on implementation-equivalent commit `864abf85c20c7e3602ed8a78e8dc975474e42618`:
+  - `tsc --noEmit`;
+  - `eslint .`;
+  - `next build` and static prerender;
+- preview route returned HTTP 200;
+- prerendered output exposed `data-scene-mode="object"`;
+- review confirmed that the single-fetch loader, GPU-loss path, native raycasting, render-loop ownership and cleanup architecture were not broadly rewritten.
 
-Start with `IMPLEMENTATION-PLAN.md` Phase 0, then Phase 1 scene-mode/config work. Read `DECISIONS.md` and `CAMERA-INTERACTION-SPEC.md` before touching controls.
+Still required before merge/release under the project UI gate:
 
-Do not begin by rewriting `SplatScene.tsx` or the renderer. The first behavioral implementation should establish the scene-mode/config contract and a separate object controller while preserving the existing environment controller.
+- rendered WebGPU visual review of the exact candidate;
+- real orbit/wheel interaction pass on desktop;
+- touch orbit + pinch pass on a real/coarse-pointer surface where available;
+- visual confirmation that all three authored hotspot poses keep the described feature unobscured by the detail UI;
+- responsive confirmation at desktop and narrow portrait minimum;
+- final production/live verification after merge.
+
+The Work/OMP local browser bridge became unavailable during this implementation session, so none of those rendered-input checks are being invented or inferred from the old screenshots. Historical free-flight evidence is not proof for the object controller.
+
+## Branch / PR
+
+- Repository: `vsolano9/splat-walk`
+- Base: `main` at `a237a5c27540edd5001d1ba2631950fa2e41a247`
+- Feature branch: `feat/object-camera-exhibit-2026-09-15`
+- Pull request: #6
+- Merge state: not merged while the rendered UI gate remains outstanding
+- Production state: unchanged until merge/deploy/live verification
+
+## Next gate
+
+Run `docs/QA-ACCEPTANCE.md` against the exact PR #6 candidate with an actual rendered browser/device surface. Fix only concrete defects found there, rerun `npm run check` if source changes, then merge and verify `https://splat-walk.vercel.app`.
