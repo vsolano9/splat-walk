@@ -559,14 +559,12 @@ export default function SplatScene() {
         {objectMode && <div className="mt-4 flex items-center justify-between gap-2 border-t border-line/50 pt-3" aria-label="Guided detail navigation">
           <button
             className="hud-button min-h-9 px-3 py-1 text-xs"
-            disabled={selected === 0}
-            onClick={() => moveTour(Math.max(0, selected - 1))}
+            onClick={() => moveTour((selected - 1 + HOTSPOTS.length) % HOTSPOTS.length)}
           >Previous</button>
           <span className="text-xs tabular-nums text-subtle">{selected + 1} of {HOTSPOTS.length}</span>
           <button
             className="hud-button min-h-9 px-3 py-1 text-xs"
-            disabled={selected === HOTSPOTS.length - 1}
-            onClick={() => moveTour(Math.min(HOTSPOTS.length - 1, selected + 1))}
+            onClick={() => moveTour((selected + 1) % HOTSPOTS.length)}
           >Next</button>
         </div>}
       </section>}
