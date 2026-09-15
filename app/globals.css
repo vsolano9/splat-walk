@@ -110,6 +110,7 @@ canvas { display: block; touch-action: none; }
 }
 .hotspot-label small { color: var(--color-accent); font-size: .68rem; }
 .hotspot-label.is-visited { border-style: dashed; }
+.scene-surface[data-scene-mode="object"] ~ .hotspot-label { bottom: auto; }
 
 .detail-card {
   inset-inline: 1.25rem;
@@ -202,7 +203,7 @@ canvas { display: block; touch-action: none; }
 @keyframes hint-in { from { transform: translateY(-5px); } to { transform: none; } }
 @keyframes dock-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes detail-in { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
-@keyframes hotspot-label-in { from { opacity: 0; transform: translate(-50%, 4px); } to { opacity: 1; transform: translateX(-50%); } }
+@keyframes hotspot-label-in { from { opacity: 0; } to { opacity: 1; } }
 
 @media (hover: hover) {
   .hud-button:hover { transform: translateY(-1px); border-color: rgb(220 235 177 / 28%); background: rgb(38 46 37 / 88%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%), 0 12px 28px rgb(0 0 0 / 20%); }
@@ -233,6 +234,7 @@ canvas { display: block; touch-action: none; }
 
 @media (min-width: 640px) {
   .detail-card { left: auto; right: 2rem; bottom: 8rem; width: 20.5rem; max-height: 16rem; padding: 1.25rem; }
+  .completion-card { left: auto; right: 2rem; bottom: 8rem; width: 20.5rem; transform: none; translate: none; }
   .detail-title { font-size: 1.28rem; }
   .detail-copy { margin-top: .78rem; font-size: .98rem; line-height: 1.65; }
   .detail-nav { left: 2rem; right: auto; bottom: 4.75rem; max-width: calc(100% - 4rem); }

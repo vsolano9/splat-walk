@@ -4,7 +4,7 @@
 
 Explore a real capture with **three.js r186's native WebGPU `GaussianSplat` and `SPZLoader`**, inside a small Next.js + Tailwind app. No third-party splat renderer, backend, auth or API keys.
 
-The bundled example is a cave-lion head. Swap in your own room-scale scan for a walkthrough. Controls are free-flight, without gravity or collision detection.
+The bundled cave-lion capture runs in **object mode**: the camera orbits and zooms around the subject instead of flying away from it. Splat Walk also retains an **environment mode** for room-scale captures using the original free-flight controller.
 
 ## Run
 
@@ -34,44 +34,56 @@ For Vercel: import this repository, select the Next.js preset and leave the proj
 
 ## Controls
 
-- Click **Explore** or empty canvas to capture the mouse; **Esc** releases it.
-- **W/A/S/D** fly; **Q/E** move down/up. Mouse movement looks around.
-- Drag-to-look works without pointer lock. Focus the canvas and use arrow keys for keyboard-only looking.
-- **Touch:** left-half drag moves, right-half drag looks. Both zones work together; lift to stop.
-- Aim or hover near a ring to reveal its label. On touch, the nearest ring is labelled while you drag.
-- Click/tap a ring or its nearby scan surface to open a detail. The keyboard-focusable dock buttons expose the same label and detail states.
-- Opened details are marked with a check and counted in the session-only `N / 3 found` display. Refreshing starts a new discovery session.
-- Closing with **Close**, **Esc**, an empty-canvas tap or **Reset view** returns focus to the canvas or the dock button that opened the detail.
-- **Reset view** restores the starting camera position and orientation without clearing discoveries. It takes 400 ms, or returns immediately with reduced motion. **Reload capture** after an error also retains discoveries; a full page refresh starts a new session. **Controls** toggles the four-second hint.
+The bundled lion uses **object mode**:
+
+- Drag with a mouse or trackpad to orbit around the lion. The subject remains the camera target.
+- Mouse wheel or trackpad scroll dollies in and out within authored distance limits.
+- **Touch:** one-finger drag orbits; two-finger pinch zooms.
+- With the canvas focused, arrow keys orbit, `+`/`-` zoom, and **Home** returns to the overview.
+- Hover or move near a ring to reveal its label. Click/tap a ring or its nearby splat surface to inspect it.
+- Selecting a detail moves toward an authored camera composition for that feature. Direct orbit/zoom input can interrupt the camera motion immediately.
+- The detail card includes cyclic **Previous** / **Next** tour navigation. Opened details are marked with a check and counted in the session-only `N / 3 found` display.
+- After all three details are discovered, **Explore freely** dismisses the completion prompt and **Replay tour** returns to the first guided detail.
+- Closing with **Close**, **Esc**, or an empty-canvas tap leaves the camera at its current inspection pose. **Overview** is the explicit return to the authored starting view and does not clear discoveries.
+- Reduced motion removes nonessential camera interpolation. **Reload capture** after an error retains discoveries; a full page refresh starts a new discovery session.
+- **Controls** toggles the four-second interaction hint.
+
+`SCENE_MODE = "environment"` preserves the original walkthrough controls: pointer-lock Explore, WASD movement, Q/E height, mouse/arrow look, drag-to-look, and split move/look touch controls.
 
 ### Safari notes
 
-In the recorded Safari 26.6.2 desktop pass, the first Esc dismissed Safari's own mouse-capture banner and a second Esc released the mouse. Press Esc again if that banner consumed the first press. This is a [recorded browser behavior](design/reference/2026-09-11-final-hardening-qa/device-qa.md), not a guarantee for every Safari version; the app does not override it or detect Safari to change the HUD.
+The Safari pointer-lock note applies only to **environment mode**. In the recorded Safari 26.6.2 desktop pass for the earlier free-flight build, the first Esc dismissed Safari's own mouse-capture banner and a second Esc released the mouse. Object mode does not request pointer lock.
 
 For keyboard navigation on macOS, enable **Keyboard navigation** in System Settings > Keyboard. Safari Settings > Advanced > **Press Tab to highlight each item on a webpage** controls Tab/Option-Tab behavior for clickable items. See [Apple's keyboard navigation guidance](https://support.apple.com/guide/safari/keyboard-shortcuts-and-gestures-cpsh003/mac). The dock uses native buttons; no browser or system preferences are changed by the app.
 
 ## Use your own scan
 
 1. Capture Gaussian splats with **Scaniverse** or **Polycam**, not a textured mesh export.
-2. Clean in **SuperSplat 3.0**: crop, remove floaters and unnecessary background, and keep the scene object/room-scale.
+2. Clean in **SuperSplat 3.0**: crop, remove floaters and unnecessary background, and keep the scene at a sensible object/room scale.
 3. Export `.spz`. If your editor only offers `.ply`/`.splat`, convert the cleaned export using [Niantic's SPZ converter](https://scaniverse.com/spz). The loader supports SPZ v1–v4.
-4. Place the file in `public/scenes/`, then change the single `SPZ_URL` constant in `lib/scene.config.ts`, for example `/scenes/my-room.spz`. Public HTTPS URLs also work when their host allows CORS.
-5. Adjust `SPAWN_POSITION`, `LOOK_AT`, `SCAN_ROTATION` and the named input constants for the scan's axes and scale. Defaults are `KEYBOARD_MOVE_SPEED = 0.35`, `TOUCH_MOVE_SPEED = 0.32` scan units/second, `MOUSE_LOOK_SENSITIVITY = 0.0018` and `TOUCH_LOOK_SENSITIVITY = 0.0034` radians/pixel, and `KEYBOARD_LOOK_SPEED = 1.15` radians/second. The lion uses an X half-turn; yours may not. There is no automatic recentering or rescaling.
-6. Set `HOTSPOTS` to `{ position: [x, y, z], label, description }` entries. Positions are world coordinates after the scan rotation, with Y up. Adjust `HOTSPOT_RADIUS` and `MARKER_SIZE` for your units. Update the title, canvas label and attribution to match your scan.
+4. Place the file in `public/scenes/`, then change `SPZ_URL` in `lib/scene.config.ts`, for example `/scenes/my-room.spz`. Public HTTPS URLs also work when their host allows CORS.
+5. Choose `SCENE_MODE = "object"` for an isolated subject or `"environment"` for a room/walkthrough.
+6. For object mode, tune `OBJECT_CAMERA` (`target`, `yaw`, `pitch`, `radius`, and radius/pitch limits) plus the named object sensitivity/damping constants. The controller derives its position from that subject-centered state and does not use arbitrary free-look quaternions.
+7. For environment mode, tune `SPAWN_POSITION`, `LOOK_AT`, and the existing fly/touch movement and look constants. The lion uses an X half-turn in `SCAN_ROTATION`; another scan may not.
+8. Set `HOTSPOTS` to `{ position, label, description, camera?, framing? }`. `position` remains the world-space raycast/marker anchor. `camera` is the preferred object-mode presentation pose for the detail. Positions are world coordinates after the scan rotation, with Y up.
+9. Adjust `HOTSPOT_RADIUS` and `MARKER_SIZE` for your units, then update the visible title, canvas label, attribution and share copy to match the scan.
 
-During development, `window.__splatWalk` in the page's main-world console reports camera coordinates, projected hotspot positions, last raycast point/source, revision and splat count. It is absent in production. A picked surface point helps place annotations.
+During development, `window.__splatWalk` in the page's main-world console reports scene mode, camera coordinates, projected hotspot positions, last raycast point/source, revision and splat count. It is absent in production. A picked surface point helps place annotations.
 
 ## Implementation
 
 - `app/page.tsx`, `app/layout.tsx`: one App Router page plus canonical, Open Graph, Twitter and icon metadata.
 - `public/og.png`, `public/icon.svg`, `app/apple-icon.png`: the committed 1200×630 real-scene share image and browser/touch icons.
-- `components/SplatScene.tsx`: WebGPU renderer, scan, native raycasts, rings, discovery state, accessible DOM HUD, responsive camera and resource cleanup.
-- `lib/controls.ts`: the `createFlyControls()` factory for pointer-lock mouse, keyboard and two-zone touch input, including the reduced-motion-aware reset tween.
-- `lib/scene.config.ts`: the scan URL, transforms, spawn, named input tuning and annotations.
+- `components/SplatScene.tsx`: WebGPU renderer, scan, native raycasts, controller selection, rings, guided discovery state, accessible DOM HUD, responsive projection and resource cleanup.
+- `lib/object-controls.ts`: subject-centered object orbit/dolly controls, damping, radius/pitch constraints, mouse/touch/keyboard input, overview reset and hotspot focus poses.
+- `lib/controls.ts`: the preserved `createFlyControls()` environment controller for pointer-lock mouse, keyboard and two-zone touch input, plus the small shared `SceneControls` contract.
+- `lib/scene.config.ts`: scene mode, scan URL/transforms, object and environment camera tuning, and annotations with authored camera poses.
 - `app/globals.css`: Tailwind v4 and the dark museum/exhibition HUD palette.
 - `lib/three-addons.d.ts`: source-matched declarations for the two new addons. The installed runtime is r186; current `@types/three` is still r185.4. Remove these declarations when DefinitelyTyped includes the addons.
 
-The scan is the visual treatment. High-opacity panels preserve contrast over arbitrary captures; there is no automatic orbit or cinematic camera path. `renderer.setAnimationLoop` owns the requestAnimationFrame-backed loop. DPR is capped at 2 desktop / 1.5 coarse-pointer, and rendering pauses in hidden tabs. The component cleans up source and generated geometries, materials, listeners, pending fetches and renderer resources. GPU loss ends the current attempt: the dead canvas is removed, pointer-lock state is cleared, and late loading/visibility callbacks cannot restart it. Retry creates a new renderer; app-initiated disposal does not replace the original error with a GPU-loss message.
+The scan remains the visual treatment. Object mode keeps a stable subject target and derives camera position from yaw, pitch and radius with delta-time-aware damping. Hotspot selection changes the desired object-camera pose without blocking direct manipulation. Environment mode keeps the prior free-flight behavior.
+
+`renderer.setAnimationLoop` owns the requestAnimationFrame-backed loop. DPR is capped at 2 desktop / 1.5 coarse-pointer, and rendering pauses in hidden tabs. The component cleans up source and generated geometries, materials, listeners, pending fetches and renderer resources. GPU loss ends the current attempt: the dead canvas is removed, pointer-lock state is cleared, and late loading/visibility callbacks cannot restart it. Retry creates a new renderer; app-initiated disposal does not replace the original error with a GPU-loss message.
 
 A deliberate click invokes native Gaussian ellipsoid raycasting and selects a configured hotspot near the surface hit. Marker raycasting covers rings when no nearby surface qualifies. No mesh proxy or fake scan rendering.
 
@@ -79,37 +91,42 @@ The SPZ is fetched once per loading attempt. Byte progress uses the GET response
 
 ## Sharing
 
-The canonical public URL is `https://splat-walk.vercel.app`. Open Graph and Twitter cards use `public/og.png`, a real 1200×630 capture of the lion in the exhibition HUD rather than placeholder artwork. When the scene, public URL or share copy changes, update both `app/layout.tsx` and the committed share image together.
+The canonical public URL is `https://splat-walk.vercel.app`. Open Graph and Twitter cards use `public/og.png`, a real 1200×630 capture of the lion in the exhibition HUD rather than placeholder artwork. The image still represents the same lion/HUD world; share descriptions now describe orbit/zoom inspection rather than free flight.
 
 ## Verification
 
-The Phase 4–6 record below predates final-hardening PR #4. These were real Chromium/native-WebGPU checks of that release, not reruns of every subsequent branch head:
+### Object-camera candidate
+
+The object-camera implementation is tracked in PR #6. The post-review full release check passed at `a65a7ffdf3ee67f01cbc2c41551a92a67e0ec028`, which contains application source `2db6cf376323631276aa2ed9cea4577f2eae0d68` plus a temporary preview-only Vercel build override:
+
+- `tsc --noEmit` passed;
+- `eslint .` passed;
+- the Next.js 16.3.4 production build compiled and prerendered successfully on Vercel;
+- the preview route returned HTTP 200 and prerendered `data-scene-mode="object"`;
+- the temporary build override was removed immediately afterwards without changing application source.
+
+The camera/touch interaction changes still require an exact-candidate rendered input/visual pass before they should be treated as released evidence. Historical screenshots below are deliberately **not** reused as proof for the new controller. See [the dated candidate record](design/reference/2026-09-15-object-camera-qa/qa.md).
+
+### Historical free-flight evidence
+
+The Phase 4–6 and final-hardening records below predate the object-camera iteration. They remain evidence for the renderer/recovery stack and the earlier free-flight behavior only:
 
 - 195,099 splats rendered; the final normal load and interaction run had zero console warnings, errors or page errors.
-- WASD and Q/E changed camera position; pointer lock, mouse look, named sensitivity tuning and the 400 ms reset tween were exercised.
-- Native splat raycasting opened detail cards; touch-nearest targeting and dock focus exposed the same labels.
-- Discovery reached `3 / 3 found`, marked each button/marker, and reset to `0 / 3` on refresh.
-- Keyboard-only Tab, Enter and Escape paths restored focus to the originating dock button; Close, canvas dismissal and Reset restored focus without falling back to `body`.
-- 1440×900, 390×844, 320×568 and coarse-pointer 844×390 were checked in idle, labelled, detail, all-found and reset-in-progress states.
-- Reduced motion disabled entrance/detail transitions and skipped the reset tween.
-- Missing-WebGPU and HTTP 500 states were exercised with working retries; the HTTP failure recovered to the real scan.
-- `npm run check` passed TypeScript, ESLint, the production build and static prerendering.
+- Native splat raycasting opened detail cards; discovery reached `3 / 3 found` and refresh reset the session.
+- Keyboard focus restoration, responsive layouts, reduced motion, missing-WebGPU and HTTP-failure retry paths were exercised.
+- Single-fetch loading and explicit GPU-loss recovery were separately hardened and recorded.
 
 ### Evidence and build scope
 
 | Record | Build tested | Scope |
 |---|---|---|
-| [Phase 4–6 evidence](design/reference/2026-09-11-phase-4-6-qa/) | Phase 4–6 candidate and production through `0ccea82` | Interaction, responsive layouts, keyboard/focus, reduced motion, metadata and release checks. |
+| [Object-camera evidence](design/reference/2026-09-15-object-camera-qa/) | PR #6 candidate family | Automated build/release checks and explicit remaining visual/input gate. |
+| [Phase 4–6 evidence](design/reference/2026-09-11-phase-4-6-qa/) | Phase 4–6 candidate and production through `0ccea82` | Earlier interaction, responsive layouts, keyboard/focus, reduced motion, metadata and release checks. |
 | [Single-fetch evidence](design/reference/2026-09-11-final-hardening-qa/spz-requests-after.txt) and [GPU-loss evidence](design/reference/2026-09-11-final-hardening-qa/device-loss-and-pointer-lock.md) | Local production build on `fix/spz-single-fetch`, code commit `7107471` | One GET, streamed progress, real device destruction and GPU-process crash/retry. |
-| [Desktop device QA](design/reference/2026-09-11-final-hardening-qa/device-qa.md) | Previous production, `0ccea82` | Chrome 153 input/pointer lock and Safari 26.6.2 rendering/input. |
-| [Physical iPhone QA](design/reference/2026-09-11-final-hardening-qa/iphone-12-pro/iphone-qa.md) | Previous production, `0ccea82` | iPhone 12 Pro, iOS 26.6.1, Safari, portrait 390×699: real touch, reset, background/resume, console and network. |
-| [ChatGPT recovery review](https://github.com/vsolano9/splat-walk/pull/4#issuecomment-5638998666) | Local production candidate matching `417a24c` | Real pointer lock plus device loss/retry/relock, interrupted loading, background/return, HTTP 500, retained discoveries, and narrow-viewport recovery. |
+| [Desktop device QA](design/reference/2026-09-11-final-hardening-qa/device-qa.md) | Previous production, `0ccea82` | Chrome 153 input/pointer lock and Safari 26.6.2 rendering/input for the free-flight build. |
+| [Physical iPhone QA](design/reference/2026-09-11-final-hardening-qa/iphone-12-pro/iphone-qa.md) | Previous production, `0ccea82` | iPhone 12 Pro, iOS 26.6.1, Safari, portrait: earlier split-touch controls, reset, background/resume, console and network. |
 
-[PR #4](https://github.com/vsolano9/splat-walk/pull/4) tracks subsequent usability checks and the final review/release status. A passing local build, successful preview, merge and live production verification are separate milestones. Older Safari/iPhone results do not establish coverage of a newer commit. Historical logs and screenshots retain their original labels and findings; the current implementation and PR follow-ups supersede resolved issues.
-
-Physical-device landscape was not captured and was explicitly skipped for this release. No physical Android or tablet pass is recorded. Touch-capability emulation and desktop resizing are not physical-device evidence. The earlier simulator-only no-adapter finding described the old generic retry copy; the current UI distinguishes **WebGPU unavailable** from a scan failure.
-
-Large-scene streaming/LOD, collision, multiplayer, auth, CMS and replacing the cave-lion sample are outside this showcase scope.
+Historical logs and screenshots retain their original labels and findings. Physical Android/tablet coverage was not recorded for the earlier release. Large-scene streaming/LOD, collision, multiplayer, auth, CMS and replacing the cave-lion sample remain outside this showcase scope.
 
 ## License and sample attribution
 
