@@ -92,3 +92,10 @@ No unplanned GPU/renderer warnings were observed. The pointer-lock rejection abo
 Canonical final desktop captures: `desktop-overview-final.png`, `desktop-face-final.png`, `desktop-surface-final.png`, `desktop-whiskers-final.png`, `desktop-completion-final.png`, plus the named input/recovery captures. Narrow acceptance uses lane B's `-postfix` files and A's final 320px supplement. Earlier failure captures remain labeled as before/pre-fix evidence. No old 2026-09-11 frame is presented as current proof.
 
 The product has one authored dark exhibit theme; no alternate light theme was added or claimed. The four supplied camera/tour/acceptance documents were the design contract; no root `DESIGN.md` was present in this target branch.
+
+## Physical iPhone touch attempt (2026-09-15)
+
+- Attempted on Victor’s iPhone, an iPhone 12 Pro (`iPhone13,3`) running iOS 26.6.2 (build `23G90`). The native display is 1170×2532 (390×844 points at 3×).
+- `npm run build` passed, the production server was bound to `0.0.0.0`, and Safari was launched on the paired device at `http://192.168.178.96:3000/`. The device was available over the local-network CoreDevice tunnel.
+- Physical verification was **NOT POSSIBLE**. The device display reported its backlight off; `devicectl` reported `passcodeRequired: true`; and iPhone Mirroring displayed “Unlock Your iPhone.” Unlocking the phone and performing real-finger input were not available to this lane.
+- Because Safari’s page could not be inspected after the required unlock, WebGPU initialization and lion rendering were not confirmed. No physical touch checks were run, and no device screenshots were captured. The existing CDP-emulated Chrome touch evidence remains separate and does not count as physical-device verification.
