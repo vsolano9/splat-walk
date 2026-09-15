@@ -17,13 +17,14 @@ The next iteration changes the default interaction from generic free flight to s
 
 Read these documents in order:
 
-1. [`PRODUCT-DIRECTION.md`](PRODUCT-DIRECTION.md) — product intent, experience principles, scope, and non-goals.
-2. [`CAMERA-INTERACTION-SPEC.md`](CAMERA-INTERACTION-SPEC.md) — canonical object-camera behavior and control mapping.
-3. [`HOTSPOTS-TOUR-SPEC.md`](HOTSPOTS-TOUR-SPEC.md) — guided hotspot camera poses, transitions, and completion behavior.
-4. [`IMPLEMENTATION-PLAN.md`](IMPLEMENTATION-PLAN.md) — bounded implementation sequence and affected files.
-5. [`QA-ACCEPTANCE.md`](QA-ACCEPTANCE.md) — acceptance criteria and regression matrix.
-6. [`DECISIONS.md`](DECISIONS.md) — decisions that should not be rediscovered by later agents.
-7. [`CONTEXT-MAP.md`](CONTEXT-MAP.md) — code/evidence map for fast orientation.
+1. [`STATUS.md`](STATUS.md) — what is implemented now vs. documented next behavior.
+2. [`PRODUCT-DIRECTION.md`](PRODUCT-DIRECTION.md) — product intent, experience principles, scope, and non-goals.
+3. [`CAMERA-INTERACTION-SPEC.md`](CAMERA-INTERACTION-SPEC.md) — canonical object-camera behavior and control mapping.
+4. [`HOTSPOTS-TOUR-SPEC.md`](HOTSPOTS-TOUR-SPEC.md) — guided hotspot camera poses, transitions, and completion behavior.
+5. [`IMPLEMENTATION-PLAN.md`](IMPLEMENTATION-PLAN.md) — bounded implementation sequence and affected files.
+6. [`QA-ACCEPTANCE.md`](QA-ACCEPTANCE.md) — acceptance criteria and regression matrix.
+7. [`DECISIONS.md`](DECISIONS.md) — decisions that should not be rediscovered by later agents.
+8. [`CONTEXT-MAP.md`](CONTEXT-MAP.md) — code/evidence map for fast orientation.
 
 ## Source-of-truth order
 
@@ -42,6 +43,7 @@ Never treat old screenshots or QA notes as proof for a newer commit unless the s
 When the object-camera work lands:
 
 - update the root `README.md` so its Controls and Implementation sections describe the actual shipped behavior;
+- update `docs/STATUS.md` to move completed items from documented to implemented;
 - update `docs/CONTEXT-MAP.md` with the final file ownership and any new module names;
 - mark completed implementation phases in `docs/IMPLEMENTATION-PLAN.md`;
 - record any material deviation in `docs/DECISIONS.md` instead of silently changing the spec;
