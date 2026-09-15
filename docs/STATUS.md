@@ -35,7 +35,7 @@ Implemented on the candidate:
 - existing free-flight controller preserved for environment mode;
 - authored camera poses for all three lion hotspots;
 - marker/surface/dock selection converging on the same detail/camera state;
-- Previous/Next guided detail navigation;
+- cyclic Previous/Next guided detail navigation with stable keyboard focus;
 - marker-adjacent projected labels with viewport clamping;
 - `3 / 3` completion acknowledgement with Explore freely / Replay tour;
 - object-mode metadata, accessibility copy and README documentation.
@@ -55,10 +55,11 @@ The hotspot config retains optional framing metadata for later visual tuning, bu
 Completed:
 
 - Vercel production-style preview builds compile on Next.js 16.3.4;
-- full `npm run check` passed on implementation-equivalent commit `864abf85c20c7e3602ed8a78e8dc975474e42618`:
+- the post-review full `npm run check` passed at `a65a7ffdf3ee67f01cbc2c41551a92a67e0ec028`, which is source commit `2db6cf376323631276aa2ed9cea4577f2eae0d68` plus a temporary preview-only build override:
   - `tsc --noEmit`;
   - `eslint .`;
   - `next build` and static prerender;
+- the temporary override was removed in `3161e331c8dd6ee99ef7b519a945865d3d029baf` without changing application source;
 - preview route returned HTTP 200;
 - prerendered output exposed `data-scene-mode="object"`;
 - review confirmed that the single-fetch loader, GPU-loss path, native raycasting, render-loop ownership and cleanup architecture were not broadly rewritten.
@@ -72,7 +73,7 @@ Still required before merge/release under the project UI gate:
 - responsive confirmation at desktop and narrow portrait minimum;
 - final production/live verification after merge.
 
-The Work/OMP local browser bridge became unavailable during this implementation session, so none of those rendered-input checks are being invented or inferred from the old screenshots. Historical free-flight evidence is not proof for the object controller.
+The Work/OMP local browser bridge became unavailable during this implementation session, and the isolated fallback Chromium could not reach external network. None of those rendered-input checks are being invented or inferred from old screenshots. Historical free-flight evidence is not proof for the object controller.
 
 ## Branch / PR
 
