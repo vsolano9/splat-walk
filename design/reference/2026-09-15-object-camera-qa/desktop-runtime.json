@@ -1,0 +1,60 @@
+{
+  "sourceCommit": "6147250e5e6005172a261cebc695d73b1a62ca37",
+  "browser": "Chrome/153.0.8010.37",
+  "surface": "http://localhost:3007/?qa=final-gpu",
+  "gpu": {
+    "gpu": true,
+    "devices": [
+      {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "fallback": false
+      }
+    ],
+    "submits": 17534
+  },
+  "dom": {
+    "width": 1440,
+    "height": 900,
+    "dpr": 1,
+    "finePointer": true,
+    "phase": "ready",
+    "mode": "object",
+    "canvasCount": 1,
+    "pointerLock": false
+  },
+  "console": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+    }
+  ],
+  "consoleExplanation": "Three expected resource errors from two deliberate HTTP503 fault-injection runs; the first also overlapped a viewport-triggered navigation. The isolated run proved one GET per attempt. Zero application warnings/pageerrors observed. Earlier instrumented baseline sessions had empty console logs.",
+  "overviewComparison": {
+    "diffPixels": 422,
+    "totalPixels": 1296000,
+    "percentDiff": 0.0326,
+    "note": "Image comparison threshold0.1; highlighted differences confined to animated marker rings, not lion or HUD."
+  },
+  "hiddenTabProbe": {
+    "pausedSubmitsBefore": 34934,
+    "pausedSubmitsAfter500ms": 34934,
+    "resumedSubmits": 35178,
+    "realBackgroundVisibility": "hidden",
+    "realReturnedVisibility": "visible"
+  },
+  "stableHttpRetry": {
+    "firstAttemptSPZGet": 1,
+    "secondAttemptSPZGet": 1,
+    "readyCanvases": 1
+  },
+  "environmentPointerLockLimitation": "WrongDocumentError: The root document of this element is not valid for pointer lock."
+}
