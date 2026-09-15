@@ -21,7 +21,7 @@ Behavior under review:
 - arrow-key orbit, `+`/`-` zoom and Home overview reset;
 - authored pitch/radius constraints and delta-time-aware damping;
 - authored camera poses for all three hotspots;
-- Previous/Next guided detail navigation;
+- cyclic Previous/Next guided detail navigation that keeps the activated control focusable;
 - marker-adjacent labels;
 - all-details completion acknowledgement;
 - no object-mode pointer lock/crosshair/WASD requirement;
@@ -29,9 +29,9 @@ Behavior under review:
 
 ## Automated / deployment evidence
 
-### Full release check
+### Post-review full release check
 
-Commit `864abf85c20c7e3602ed8a78e8dc975474e42618` temporarily added a preview-only Vercel build override to execute the repository's normal release command:
+After the final source review fix, commit `a65a7ffdf3ee67f01cbc2c41551a92a67e0ec028` temporarily added a preview-only Vercel build override to execute the repository's normal release command against source commit `2db6cf376323631276aa2ed9cea4577f2eae0d68` plus the temporary config:
 
 ```text
 npm run check
@@ -51,19 +51,19 @@ Static pages generated 4/4
 Build completed
 ```
 
-Vercel deployment: `dpl_62bfheH55iPfFRGnC93ccdHt8iXH`
+Vercel deployment: `dpl_Hi1GnBLy5s6axu1ARW55j7dipCxR`
 
-The temporary `vercel.json` was then deleted in commit `3277fe1ae12aea30db96608b7cd68e3db1d099be`; it is not part of the intended product configuration.
+The temporary `vercel.json` was removed immediately afterwards in commit `3161e331c8dd6ee99ef7b519a945865d3d029baf`. It is not part of the intended product configuration. The removal changes deployment configuration only; the checked application source is unchanged.
 
-### Normal preview build
+An earlier full-check deployment at `864abf85c20c7e3602ed8a78e8dc975474e42618` also passed before the later review/focus fix. The post-review result above supersedes it for release-check purposes.
 
-Implementation commit `5edb98850733dc82d5b6990ea1de469d479776a7` also passed Vercel's normal `npm run build`, including Next compilation, TypeScript and static prerender.
+### Normal preview builds
 
-Vercel deployment: `dpl_7qFcJBtiQi7WzTaYSjgkHzUUXEzF`
+The branch has repeatedly passed Vercel's normal `npm run build`, including Next compilation, TypeScript and static prerender. A normal preview was triggered again after removal of the final temporary build override so the branch returns to its intended configuration.
 
 ### Preview route
 
-The full-check preview returned HTTP 200 and its prerendered HTML contained:
+A candidate preview returned HTTP 200 and its prerendered HTML contained:
 
 ```html
 data-scene-mode="object"
@@ -76,6 +76,7 @@ This proves the intended scene mode is wired into the rendered app shell. It doe
 - added `lostpointercapture` cleanup and explicit pointer-capture release on object-controller disposal;
 - removed a stale React-state capture from the renderer effect's target-clear helper;
 - expanded the object-mode canvas accessibility label to include keyboard orbit/zoom controls;
+- made Previous/Next tour navigation cyclic so keyboard focus never lands on a control that becomes disabled after activation;
 - corrected metadata that still described the lion as "Move freely";
 - reconciled README/docs so free-flight claims are scoped to environment mode rather than the lion.
 
@@ -113,7 +114,7 @@ The integration change in `SplatScene.tsx` selects `createObjectControls` or `cr
 - reduced-motion camera behavior on a rendered surface;
 - exact-candidate console/runtime-error pass after interactive use.
 
-Reason: the Work/OMP local browser/device bridge became unavailable during the implementation session. No substitute claim is made from code inspection, HTTP output or historical screenshots.
+Reason: the Work/OMP local browser/device bridge became unavailable during the implementation session. An isolated Chromium fallback existed locally but could not reach external network, so it could not render the Vercel preview. No substitute claim is made from code inspection, HTTP output or historical screenshots.
 
 ## Merge gate
 
