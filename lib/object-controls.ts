@@ -41,6 +41,8 @@ type PointerState = {
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const nearestEquivalentAngle = (angle: number, reference: number) =>
+  reference + Math.atan2(Math.sin(angle - reference), Math.cos(angle - reference));
 
 export function createObjectControls({
   camera,
@@ -74,7 +76,7 @@ export function createObjectControls({
 
   const setDesiredPose = (pose: CameraPose) => {
     desired.target.set(...pose.target);
-    desired.yaw = pose.yaw;
+    desired.yaw = nearestEquivalentAngle(pose.yaw, current.yaw);
     desired.pitch = clamp(pose.pitch, OBJECT_CAMERA.minPitch, OBJECT_CAMERA.maxPitch);
     desired.radius = clamp(pose.radius, OBJECT_CAMERA.minRadius, OBJECT_CAMERA.maxRadius);
     if (reduceMotion) {
@@ -102,10 +104,13 @@ export function createObjectControls({
   const reset = () => {
     onTargetClear();
     keys.clear();
-    copyState(desired, overview);
+    desired.target.copy(overview.target);
+    desired.yaw = nearestEquivalentAngle(overview.yaw, current.yaw);
+    desired.pitch = overview.pitch;
+    desired.radius = overview.radius;
     if (reduceMotion) {
       cancelReset();
-      copyState(current, overview);
+      copyState(current, desired);
       applyCamera();
       return;
     }
@@ -231,6 +236,7 @@ export function createObjectControls({
       return;
     }
     cancelReset();
+    if (!keys.has(event.code)) onTargetClear();
     keys.add(event.code);
   }, { signal });
   window.addEventListener("keyup", (event) => { keys.delete(event.code); }, { signal });
