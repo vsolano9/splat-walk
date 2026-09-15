@@ -115,6 +115,22 @@ export function createObjectControls({
     }
   };
 
+  const resetPinchState = () => {
+    const remainingTouches = [...pointers.values()].filter((candidate) => candidate.pointerType !== "mouse");
+    if (remainingTouches.length === 1) {
+      const remaining = remainingTouches[0];
+      remaining.startX = remaining.x;
+      remaining.startY = remaining.y;
+      remaining.moved = true;
+      pinchDistance = 0;
+      return;
+    }
+    if (remainingTouches.length === 0) {
+      pinchDistance = 0;
+      hadMultitouch = false;
+    }
+  };
+
   canvas.addEventListener("pointerdown", (event) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     cancelReset();
@@ -182,19 +198,7 @@ export function createObjectControls({
     const shouldPick = allowPick && !pointer.moved && !hadMultitouch;
     pointers.delete(event.pointerId);
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
-
-    const remainingTouches = [...pointers.values()].filter((candidate) => candidate.pointerType !== "mouse");
-    if (remainingTouches.length === 1) {
-      const remaining = remainingTouches[0];
-      remaining.startX = remaining.x;
-      remaining.startY = remaining.y;
-      remaining.moved = true;
-      pinchDistance = 0;
-    } else if (remainingTouches.length === 0) {
-      pinchDistance = 0;
-      hadMultitouch = false;
-    }
-
+    resetPinchState();
     if (shouldPick) onPick(event.clientX, event.clientY, false);
   };
 
@@ -202,6 +206,11 @@ export function createObjectControls({
   canvas.addEventListener("pointercancel", (event) => {
     onTargetClear();
     finishPointer(event, false);
+  }, { signal });
+  canvas.addEventListener("lostpointercapture", (event) => {
+    if (!pointers.delete(event.pointerId)) return;
+    onTargetClear();
+    resetPinchState();
   }, { signal });
   canvas.addEventListener("pointerleave", () => {
     if (pointers.size === 0) onTargetClear();
@@ -273,6 +282,9 @@ export function createObjectControls({
       }
     },
     dispose() {
+      for (const pointerId of pointers.keys()) {
+        if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+      }
       signalController.abort();
       keys.clear();
       pointers.clear();
