@@ -12,6 +12,14 @@ import {
   TOUCH_MOVE_SPEED,
 } from "./scene.config";
 
+export type SceneControls = {
+  reset: () => void;
+  update: (delta: number) => void;
+  dispose: () => void;
+  lock?: () => Promise<void>;
+  focusHotspot?: (index: number) => void;
+};
+
 type ControlOptions = {
   camera: PerspectiveCamera;
   canvas: HTMLCanvasElement;
@@ -23,11 +31,8 @@ type ControlOptions = {
   onResetChange: (resetting: boolean) => void;
   reduceMotion: boolean;
 };
-export type FlyControls = {
+export type FlyControls = SceneControls & {
   lock: () => Promise<void>;
-  reset: () => void;
-  update: (delta: number) => void;
-  dispose: () => void;
 };
 type Drag = { startX: number; startY: number; x: number; y: number; moved: boolean; role: "move" | "look" | "mouse" };
 
