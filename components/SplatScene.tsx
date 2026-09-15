@@ -95,7 +95,7 @@ export default function SplatScene() {
       });
     };
     const clearTarget = () => {
-      if (targetedRef.current === null && hotspotLabelPosition === null) return;
+      if (targetedRef.current === null) return;
       targetedRef.current = null;
       setTargeted(null);
       setHotspotLabelPosition(null);
@@ -270,7 +270,7 @@ export default function SplatScene() {
         const canvas = renderer.domElement;
         canvas.tabIndex = 0;
         canvas.setAttribute("aria-label", objectMode
-          ? "Cave lion 3D scan. Drag to orbit, scroll or pinch to zoom, and select a ring for details."
+          ? "Cave lion 3D scan. Drag to orbit, scroll or pinch to zoom, arrow keys orbit, plus and minus zoom, and select a ring for details."
           : coarsePointer
             ? "Cave lion 3D scan. Drag the left side to move, drag the right side to look, and tap a ring for details."
             : "Cave lion 3D scan. WASD to move, Q and E for height, arrow keys or mouse to look. Press Escape to release the mouse.");
