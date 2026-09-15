@@ -42,7 +42,7 @@ The bundled lion uses **object mode**:
 - With the canvas focused, arrow keys orbit, `+`/`-` zoom, and **Home** returns to the overview.
 - Hover or move near a ring to reveal its label. Click/tap a ring or its nearby splat surface to inspect it.
 - Selecting a detail moves toward an authored camera composition for that feature. Direct orbit/zoom input can interrupt the camera motion immediately.
-- The detail card includes **Previous** / **Next** tour navigation. Opened details are marked with a check and counted in the session-only `N / 3 found` display.
+- The detail card includes cyclic **Previous** / **Next** tour navigation. Opened details are marked with a check and counted in the session-only `N / 3 found` display.
 - After all three details are discovered, **Explore freely** dismisses the completion prompt and **Replay tour** returns to the first guided detail.
 - Closing with **Close**, **Esc**, or an empty-canvas tap leaves the camera at its current inspection pose. **Overview** is the explicit return to the authored starting view and does not clear discoveries.
 - Reduced motion removes nonessential camera interpolation. **Reload capture** after an error retains discoveries; a full page refresh starts a new discovery session.
@@ -97,15 +97,15 @@ The canonical public URL is `https://splat-walk.vercel.app`. Open Graph and Twit
 
 ### Object-camera candidate
 
-The object-camera implementation is tracked in PR #6. Automated release checks passed on the implementation-equivalent preview commit `864abf85c20c7e3602ed8a78e8dc975474e42618`:
+The object-camera implementation is tracked in PR #6. The post-review full release check passed at `a65a7ffdf3ee67f01cbc2c41551a92a67e0ec028`, which contains application source `2db6cf376323631276aa2ed9cea4577f2eae0d68` plus a temporary preview-only Vercel build override:
 
 - `tsc --noEmit` passed;
 - `eslint .` passed;
 - the Next.js 16.3.4 production build compiled and prerendered successfully on Vercel;
 - the preview route returned HTTP 200 and prerendered `data-scene-mode="object"`;
-- the normal Vercel build also passed after the temporary release-check build override was removed.
+- the temporary build override was removed immediately afterwards without changing application source.
 
-The camera/touch interaction changes still require an exact-candidate rendered input/visual pass before they should be treated as released evidence. Historical screenshots below are deliberately **not** reused as proof for the new controller.
+The camera/touch interaction changes still require an exact-candidate rendered input/visual pass before they should be treated as released evidence. Historical screenshots below are deliberately **not** reused as proof for the new controller. See [the dated candidate record](design/reference/2026-09-15-object-camera-qa/qa.md).
 
 ### Historical free-flight evidence
 
