@@ -16,6 +16,7 @@ const objectMode = SCENE_MODE === "object";
 export default function SplatScene() {
   const host = useRef<HTMLDivElement>(null);
   const controls = useRef<SceneControls | null>(null);
+  const updateFraming = useRef<(() => void) | null>(null);
   const cardClose = useRef<HTMLButtonElement>(null);
   const restoreFocusTarget = useRef<HTMLElement | null>(null);
   const selectedRef = useRef<number | null>(null);
@@ -40,13 +41,14 @@ export default function SplatScene() {
   const allFound = visited.size === HOTSPOTS.length;
 
   useEffect(() => {
-    if (phase !== "ready" || !hint || selected !== null) return;
+    if (phase !== "ready" || !hint) return;
     const timer = window.setTimeout(() => setHint(false), 4000);
     return () => window.clearTimeout(timer);
-  }, [phase, hint, selected]);
+  }, [phase, hint]);
 
   useEffect(() => {
     selectedRef.current = selected;
+    updateFraming.current?.();
     if (selected !== null && !detailWasOpen.current) cardClose.current?.focus({ preventScroll: true });
     detailWasOpen.current = selected !== null;
   }, [selected]);
@@ -199,6 +201,7 @@ export default function SplatScene() {
       request.abort();
       removeVisibility?.();
       resizeObserver?.disconnect();
+      updateFraming.current = null;
       sceneControls?.dispose();
       if (controls.current === sceneControls) controls.current = null;
       renderer?.setAnimationLoop(null);
@@ -275,6 +278,23 @@ export default function SplatScene() {
             ? "Cave lion 3D scan. Drag the left side to move, drag the right side to look, and tap a ring for details."
             : "Cave lion 3D scan. WASD to move, Q and E for height, arrow keys or mouse to look. Press Escape to release the mouse.");
         container!.appendChild(canvas);
+        const reframe = () => {
+          const width = container!.clientWidth;
+          const height = container!.clientHeight;
+          const index = selectedRef.current;
+          const card = container!.parentElement?.querySelector<HTMLElement>(".detail-card");
+          if (!objectMode || width >= 640 || index === null || !card) {
+            if (camera.view?.enabled) camera.clearViewOffset();
+            return;
+          }
+          const header = container!.parentElement?.querySelector<HTMLElement>(".scene-header");
+          const top = (header ? header.offsetTop + header.offsetHeight : 0) + 16;
+          const bottom = Math.max(top, card.offsetTop - 16);
+          const offset = HOTSPOTS[index].framing?.mobileOffset ?? [0, 0];
+          const offsetY = Math.max(-offset[1] * height, height / 2 - (top + bottom) / 2);
+          camera.setViewOffset(width, height, -offset[0] * width, offsetY, width, height);
+        };
+        updateFraming.current = reframe;
         const resize = () => {
           if (!renderer) return;
           const width = container!.clientWidth;
@@ -283,6 +303,7 @@ export default function SplatScene() {
           // Preserve the subject's horizontal framing on narrow touch screens.
           camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(25)) * Math.max(1, 0.8 / camera.aspect)));
           camera.updateProjectionMatrix();
+          reframe();
           renderer.setSize(width, height);
         };
         resizeObserver = new ResizeObserver(resize);
@@ -473,6 +494,9 @@ export default function SplatScene() {
       data-phase={phase}
       data-scene-mode={SCENE_MODE}
       data-resetting={resetting || undefined}
+      onKeyDown={(event) => {
+        if (objectMode && event.code === "Home" && event.target instanceof HTMLCanvasElement) closeCard(event.target);
+      }}
     />
     <div className="scene-atmosphere pointer-events-none absolute inset-0" aria-hidden="true" />
     <header className="scene-header pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4">
@@ -569,7 +593,7 @@ export default function SplatScene() {
         </div>}
       </section>}
       {objectMode && allFound && selected === null && !completionDismissed && <section
-        className="pointer-events-auto absolute bottom-28 left-1/2 z-20 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-line bg-panel/95 px-4 py-3 text-center shadow-2xl backdrop-blur-xl"
+        className="completion-card pointer-events-auto absolute bottom-28 left-1/2 z-20 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-line bg-panel/95 px-4 py-3 text-center shadow-2xl backdrop-blur-xl"
         aria-live="polite"
       >
         <p className="font-medium">All details discovered</p>
