@@ -25,8 +25,9 @@ export function readSceneParam(location: Location): ScanSource | null {
 const FRAME_SAMPLES = 40_000;
 // Trims stray floaters that would otherwise push the camera far away from the subject.
 const FRAME_PERCENTILE = 0.02;
-// Half the minimum vertical field of view the scene camera uses (see SplatScene resize()).
-const HALF_FOV = MathUtils.degToRad(25);
+// Narrowest half field of view SplatScene's resize() can produce: 25° vertical, and on narrow
+// screens it widens vertically so the horizontal half-angle never drops below atan(0.8·tan 25°).
+const HALF_FOV = Math.atan(0.8 * Math.tan(MathUtils.degToRad(25)));
 
 // Derives an object-camera profile from a loaded capture: target its robust centre and back off
 // until its robust bounding sphere fills the view. Pitch limits keep the authored defaults.
