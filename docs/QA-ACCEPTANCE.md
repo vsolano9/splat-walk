@@ -1,6 +1,6 @@
 # QA and acceptance gate
 
-Use this document for the object-camera iteration. Historical passes under `design/reference/` remain evidence for their named commits only.
+Sections 1–15 describe qualification for the original object-camera iteration and future controller changes. For the bounded custom-scan hardening, use section 16 and its explicitly scoped evidence; this does not claim a rerun of unaffected controller/GPU-loss/device matrices. Historical passes under `design/reference/` remain evidence for their named commits only.
 
 ## 1. Build / static gate
 
@@ -256,3 +256,25 @@ GO requires all of the following:
 8. renderer/loading/retry regressions are clear;
 9. environment free-flight path still works;
 10. evidence is committed for the exact candidate being approved.
+
+## 16. Custom-scan hardening regressions
+
+For scan-source and filename/HUD changes, run the production-build browser suite after `npm run check`:
+
+```sh
+npm run test:e2e
+```
+
+The runner uses installed Google Chrome with native WebGPU, one worker and no retries. It starts and stops its own production server at `http://127.0.0.1:3107`. Do not reuse an unrelated server or enable unsafe/software-rendering flags to mask an adapter failure. Browser output defaults to the system-temp `splat-walk-e2e` directory; set `SPLAT_WALK_TEST_OUTPUT` to preserve a separate run.
+
+Set `SPLAT_WALK_BASE_URL` to test an existing deployment without starting a local server. For example, in PowerShell:
+
+```powershell
+$env:SPLAT_WALK_BASE_URL = "https://splat-walk.vercel.app"
+npm run test:e2e
+Remove-Item Env:SPLAT_WALK_BASE_URL
+```
+
+The 14 tests cover selecting a file from each open lion detail, dropped files from selected/focused states, invalid-file retry/return, rapid source replacement, malformed percent/UTF-8 filename escapes, valid encoded filenames, and long/unbroken filenames at 1440×900, 390×844, 320×568 and 844×390. Assertions check a single live canvas, cleared custom-scan annotations, fresh discoveries on return, Next/Escape/focus behavior, real button activation, and header/footer bounds. Any uncaught exception or unexpected console warning/error fails the run. Deliberate 404 scan fixtures are identified separately from application failures.
+
+Inspect the affected screenshots as well as test results. Browser-dispatched DataTransfer events are not physical OS file dragging; touch viewports are desktop emulation, not handheld qualification. The scoped [2026-09-27 record](evidence/custom-scan-hardening-2026-09-27.md) does not re-label historical GPU-loss, environment-controller or physical-device evidence.

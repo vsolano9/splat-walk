@@ -1,18 +1,18 @@
 # Splat Walk context map
 
-Use this file to orient before editing. It maps both the released renderer/recovery baseline and the PR #6 object-camera candidate.
+Use this file to orient before editing. It maps the released renderer/recovery baseline, object camera and custom-scan loading.
 
 ## Repository / current work
 
 - Repository: `vsolano9/splat-walk`
 - Public demo: `https://splat-walk.vercel.app`
-- Current implementation branch: `feat/object-camera-exhibit-2026-09-15`
-- Pull request: #6
-- Base: `main` at `a237a5c27540edd5001d1ba2631950fa2e41a247`
+- Integration branch: `main`
+- Object camera: PR #6; custom scans/framing: PRs #7 and #8
+- Custom-scan hardening and release verification: PR #9; see `docs/STATUS.md`
 - Stack: Next.js App Router, React, Tailwind CSS v4, three.js r186 WebGPU, TypeScript
 - No backend/auth/API keys required
 
-Production remains on the earlier free-flight behavior until PR #6 passes rendered UI review, merges, deploys and is verified live. The branch README describes the candidate behavior; historical `design/reference/` records stay tied to their named commits.
+The bundled lion uses object mode with its authored tour. Opened/dropped/linked captures use auto-framed object mode without lion annotations. Environment mode remains available through scene configuration. Historical `design/reference/` records stay tied to their named commits.
 
 ## Read order
 
@@ -144,9 +144,9 @@ Existing real-scene social card. The lion/HUD world remains representative, so P
 
 `public/icon.svg` and `app/apple-icon.png` are existing brand/touch assets and are not camera-work targets.
 
-## Candidate interaction truth
+## Current interaction truth
 
-For the lion on PR #6:
+For the bundled lion:
 
 - object mode is explicit rather than inferred;
 - the subject target is the camera invariant;
@@ -164,7 +164,7 @@ For the lion on PR #6:
 
 ### `design/reference/2026-09-15-object-camera-qa/`
 
-PR #6 candidate evidence. At present this records automated build/preview truth and explicitly lists the outstanding rendered-input/visual gate. It must be expanded if real visual QA is later performed.
+Released PR #6 object-camera evidence with a native-WebGPU Chromium GO record. Physical touch/Safari limits remain explicit.
 
 ### `design/reference/2026-09-11-phase-4-6-qa/`
 
@@ -205,24 +205,10 @@ High-value proven behavior:
 
 A camera improvement that weakens any of these is a regression.
 
-## Current gate
+## Current verification and continuation
 
-Automated checks are green. The remaining ship blocker is not source compilation; it is the required real rendered UI/input review of PR #6:
+`playwright.config.ts` and `tests/e2e/custom-scans.spec.ts` own the portable, 14-test native-WebGPU regression suite. The runner starts/stops a local production server unless `SPLAT_WALK_BASE_URL` names an existing deployment; output defaults outside the repo in the system temp directory.
 
-- desktop orbit and wheel/trackpad zoom;
-- narrow portrait touch orbit and pinch;
-- all three authored detail shots with their panel open;
-- Overview/reset and reduced-motion behavior;
-- responsive visual composition and focus paths.
+Read `docs/STATUS.md` and `docs/evidence/custom-scan-hardening-2026-09-27.md` for the current scoped acceptance and release record. PR #6 is complete, not an outstanding merge gate.
 
-The local Work/OMP browser bridge became unavailable during this implementation session, so no claim is made that those checks ran.
-
-## If continuing this work
-
-1. inspect the exact current PR #6 head;
-2. read `docs/STATUS.md` and `docs/QA-ACCEPTANCE.md`;
-3. run a real WebGPU preview rather than relying on historical screenshots;
-4. tune `OBJECT_CAMERA` / hotspot camera poses only if the rendered evidence shows a concrete framing problem;
-5. keep changes on the feature branch;
-6. rerun `npm run check` after source changes;
-7. merge only after the UI gate is satisfied, then verify production live.
+For further changes: inspect current main and open PRs, create a bounded branch, test the affected flows, run `npm run check` plus the relevant browser regressions, then merge and verify the production alias. Do not re-label historical device coverage or tune authored camera poses without a reproducible visual reason.

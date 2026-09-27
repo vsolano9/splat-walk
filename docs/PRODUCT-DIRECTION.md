@@ -1,5 +1,7 @@
 # Product direction
 
+> Accepted object-camera direction from the PR #6 planning period. Its free-flight problem statement below describes the former implementation; the lion now uses the released object camera. See [STATUS.md](STATUS.md) for current custom-scan behavior and maintenance.
+
 ## Purpose
 
 Splat Walk is an interactive WebGPU Gaussian-splat exhibit. Its value is not merely that it renders a capture; the experience should make a captured subject feel tangible, understandable, and worth exploring.
