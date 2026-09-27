@@ -69,7 +69,14 @@ All three confirmed defects are fixed and covered by the 14 passing browser regr
 
 `npm run check` and `npm run test:e2e` pass. This closes 3/3 findings in the bounded hardening scope, not a claim of universal browser/device compatibility.
 
+## Safari Simulator follow-up
+
+The [Safari Simulator qualification](evidence/safari-simulator-2026-09-27.md) exercised production in iPhone 17 Pro and iPad Pro 11-inch (M5) simulators on iOS 26.5 / Safari 26.5. Both correctly reached the WebGPU-unavailable fallback with no horizontal overflow; malformed and long linked filenames kept the page shell intact.
+
+Apple Simulator cannot provide the WebGPU feature level Splat Walk requires, so this pass cannot qualify splat rendering, orbit, pinch, hotspot/tour or ready-state custom scans. It is fallback-shell coverage only.
+
 ## Open coverage gaps
 
-- physical touch, Safari and Android/tablet for the object camera and custom scans;
+- hardware Safari/WebGPU and real touch gestures remain unqualified for the current object-camera/custom-scan release; the simulator cannot replace this because WebGPU is unsupported there;
+- Android hardware remains unqualified;
 - environment mode is not offered for custom scans (object mode only).
