@@ -3,8 +3,6 @@
 import { PerspectiveCamera, Vector3 } from "three/webgpu";
 import type { SceneControls } from "./controls";
 import {
-  HOTSPOTS,
-  OBJECT_CAMERA,
   OBJECT_DAMPING,
   OBJECT_KEYBOARD_ORBIT_SPEED,
   OBJECT_KEYBOARD_ZOOM_SPEED,
@@ -12,6 +10,8 @@ import {
   OBJECT_TOUCH_ORBIT_SENSITIVITY,
   OBJECT_ZOOM_SENSITIVITY,
   type CameraPose,
+  type Hotspot,
+  type ObjectCameraProfile,
 } from "./scene.config";
 
 type ObjectControlOptions = {
@@ -22,6 +22,8 @@ type ObjectControlOptions = {
   onTargetClear: () => void;
   onResetChange: (resetting: boolean) => void;
   reduceMotion: boolean;
+  profile: ObjectCameraProfile;
+  hotspots: readonly Hotspot[];
 };
 
 type ObjectState = {
@@ -52,12 +54,14 @@ export function createObjectControls({
   onTargetClear,
   onResetChange,
   reduceMotion,
+  profile,
+  hotspots,
 }: ObjectControlOptions): SceneControls {
   const signalController = new AbortController();
   const { signal } = signalController;
   const pointers = new Map<number, PointerState>();
   const keys = new Set<string>();
-  const overview = makeState(OBJECT_CAMERA);
+  const overview = makeState(profile);
   const current = cloneState(overview);
   const desired = cloneState(overview);
   let resetting = false;
@@ -77,8 +81,8 @@ export function createObjectControls({
   const setDesiredPose = (pose: CameraPose) => {
     desired.target.set(...pose.target);
     desired.yaw = nearestEquivalentAngle(pose.yaw, current.yaw);
-    desired.pitch = clamp(pose.pitch, OBJECT_CAMERA.minPitch, OBJECT_CAMERA.maxPitch);
-    desired.radius = clamp(pose.radius, OBJECT_CAMERA.minRadius, OBJECT_CAMERA.maxRadius);
+    desired.pitch = clamp(pose.pitch, profile.minPitch, profile.maxPitch);
+    desired.radius = clamp(pose.radius, profile.minRadius, profile.maxRadius);
     if (reduceMotion) {
       copyState(current, desired);
       applyCamera();
@@ -88,7 +92,7 @@ export function createObjectControls({
   const orbit = (dx: number, dy: number, sensitivity: number) => {
     cancelReset();
     desired.yaw -= dx * sensitivity;
-    desired.pitch = clamp(desired.pitch - dy * sensitivity, OBJECT_CAMERA.minPitch, OBJECT_CAMERA.maxPitch);
+    desired.pitch = clamp(desired.pitch - dy * sensitivity, profile.minPitch, profile.maxPitch);
   };
 
   const zoomByWheel = (deltaY: number) => {
@@ -96,8 +100,8 @@ export function createObjectControls({
     const normalized = clamp(deltaY, -120, 120);
     desired.radius = clamp(
       desired.radius * Math.exp(normalized * OBJECT_ZOOM_SENSITIVITY),
-      OBJECT_CAMERA.minRadius,
-      OBJECT_CAMERA.maxRadius,
+      profile.minRadius,
+      profile.maxRadius,
     );
   };
 
@@ -182,8 +186,8 @@ export function createObjectControls({
       }
       desired.radius = clamp(
         pinchRadius * (pinchDistance / nextDistance),
-        OBJECT_CAMERA.minRadius,
-        OBJECT_CAMERA.maxRadius,
+        profile.minRadius,
+        profile.maxRadius,
       );
       onTargetClear();
       return;
@@ -246,7 +250,7 @@ export function createObjectControls({
   return {
     reset,
     focusHotspot(index: number) {
-      const pose = HOTSPOTS[index]?.camera;
+      const pose = hotspots[index]?.camera;
       if (!pose) return;
       cancelReset();
       onTargetClear();
@@ -261,15 +265,15 @@ export function createObjectControls({
         desired.yaw -= orbitX * OBJECT_KEYBOARD_ORBIT_SPEED * delta;
         desired.pitch = clamp(
           desired.pitch - orbitY * OBJECT_KEYBOARD_ORBIT_SPEED * delta,
-          OBJECT_CAMERA.minPitch,
-          OBJECT_CAMERA.maxPitch,
+          profile.minPitch,
+          profile.maxPitch,
         );
       }
       if (zoomIn || zoomOut) {
         desired.radius = clamp(
           desired.radius * Math.exp((zoomOut - zoomIn) * OBJECT_KEYBOARD_ZOOM_SPEED * delta),
-          OBJECT_CAMERA.minRadius,
-          OBJECT_CAMERA.maxRadius,
+          profile.minRadius,
+          profile.maxRadius,
         );
       }
 
