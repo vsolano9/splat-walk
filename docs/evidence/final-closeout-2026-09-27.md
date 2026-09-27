@@ -8,7 +8,7 @@ Splat Walk is complete for the accepted showcase scope. There are no known relea
 
 The released product includes the native three.js WebGPU splat viewer, the subject-centered cave-lion object camera and guided details, preserved environment/free-flight mode, custom SPZ file/drop/link loading, automatic custom-capture framing, recovery handling, responsive HUD behavior, and the custom-scan hardening covered by PR #9.
 
-Final closeout PR: **pending**. Its release comment records the final documentation-only merge and Vercel deployment identity.
+Final closeout: [PR #11](https://github.com/vsolano9/splat-walk/pull/11). Its release comment records the final documentation-only merge and Vercel deployment identity.
 
 ## Verification carried forward
 
