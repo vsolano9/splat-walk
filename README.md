@@ -22,13 +22,19 @@ npm run build
 npm start
 ```
 
-Run the complete release check before pushing:
+Run the static/build release check before pushing:
 
 ```sh
 npm run check
 ```
 
-`check` runs TypeScript with no emit, the flat ESLint configuration, and a production Next build.
+`check` runs TypeScript with no emit, the flat ESLint configuration, and a production Next build. For scan-source or HUD changes, also run the native-WebGPU browser regressions after that build:
+
+```sh
+npm run test:e2e
+```
+
+This starts and stops its own local production server at `http://127.0.0.1:3107` and uses installed Google Chrome with a usable WebGPU adapter. Fourteen tests cover detail/file transitions, malformed links, recovery, and long-filename layouts at 1440×900, 390×844, 320×568 and 844×390. No browser is installed automatically and no unsafe WebGPU flags are used. `SPLAT_WALK_BASE_URL` targets an existing deployment instead; `SPLAT_WALK_TEST_OUTPUT` overrides the default system-temp `splat-walk-e2e` evidence folder. See [QA acceptance](docs/QA-ACCEPTANCE.md#16-custom-scan-hardening-regressions).
 
 For Vercel: import this repository, select the Next.js preset and leave the project root at the repository root. No environment variables are required. Build command: `npm run build`.
 
@@ -118,6 +124,10 @@ Exercised in Chrome with the native WebGPU backend on a local dev server, with n
 - Error cases showed the error card with **Back to the lion**: a non-SPZ file ("invalid gzip data"), a same-origin 404, and a cross-origin URL without CORS. An `http:` cross-origin `?scene=` was ignored and loaded the lion.
 - The lion's dock, Next and Escape flow still worked after returning to it. The 320×568 layout was checked with both the lion and a custom scan.
 
+### Custom-scan hardening
+
+[PR #9](https://github.com/vsolano9/splat-walk/pull/9) fixes source-switch crashes while a lion detail is open, malformed URL-filename decoding, and long names pushing mobile controls off-screen. The full filename remains available in DOM text and title attributes while visual labels truncate to fit. All 14 browser regressions passed on the production build of code commit `c9dcdeca1a694de9cd6561dbd001faa11e1f24e0`; see the [scoped evidence record](docs/evidence/custom-scan-hardening-2026-09-27.md). The PR release comment records deployment identity and post-merge public-site verification.
+
 ### Historical free-flight evidence
 
 The Phase 4–6 and final-hardening records below predate the object-camera iteration. They remain evidence for the renderer/recovery stack and the earlier free-flight behavior only:
@@ -131,7 +141,7 @@ The Phase 4–6 and final-hardening records below predate the object-camera iter
 
 | Record | Build tested | Scope |
 |---|---|---|
-| [Object-camera evidence](design/reference/2026-09-15-object-camera-qa/) | PR #6 candidate family | Automated build/release checks and explicit remaining visual/input gate. |
+| [Object-camera evidence](design/reference/2026-09-15-object-camera-qa/) | PR #6 candidate family | Released object-camera GO record; coverage limits remain explicit. |
 | [Phase 4–6 evidence](design/reference/2026-09-11-phase-4-6-qa/) | Phase 4–6 candidate and production through `0ccea82` | Earlier interaction, responsive layouts, keyboard/focus, reduced motion, metadata and release checks. |
 | [Single-fetch evidence](design/reference/2026-09-11-final-hardening-qa/spz-requests-after.txt) and [GPU-loss evidence](design/reference/2026-09-11-final-hardening-qa/device-loss-and-pointer-lock.md) | Local production build on `fix/spz-single-fetch`, code commit `7107471` | One GET, streamed progress, real device destruction and GPU-process crash/retry. |
 | [Desktop device QA](design/reference/2026-09-11-final-hardening-qa/device-qa.md) | Previous production, `0ccea82` | Chrome 153 input/pointer lock and Safari 26.6.2 rendering/input for the free-flight build. |

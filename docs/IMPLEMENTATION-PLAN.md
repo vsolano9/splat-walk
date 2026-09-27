@@ -1,5 +1,7 @@
 # Object-camera implementation plan
 
+> Historical implementation plan: completed in PR #6. Preserve the original phases below as design history, not open work. Current release and maintenance scope are tracked in [STATUS.md](STATUS.md).
+
 This plan is intentionally narrow. The renderer/loading/recovery stack is already proven; the work is to replace the cave-lion interaction model while preserving environment/free-flight support.
 
 ## Phase 0 — Baseline and branch hygiene

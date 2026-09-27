@@ -50,12 +50,24 @@ export default function SplatScene() {
   // The authored lion tour only applies to the bundled sample; other captures are auto-framed objects.
   const custom = source !== null && source.kind !== "bundled";
   const hotspots = custom ? NO_HOTSPOTS : HOTSPOTS;
+  const selectedHotspot = selected === null ? undefined : hotspots[selected];
+  const targetedHotspot = targeted === null ? undefined : hotspots[targeted];
   const objectMode = custom || SCENE_MODE === "object";
   const sceneName = source && source.kind !== "bundled" ? source.name : "Cave lion";
   const controlsVisible = selected === null && (hint || (!objectMode && lockError));
   const allFound = hotspots.length > 0 && visited.size === hotspots.length;
 
   const openScan = (next: ScanSource) => {
+    // Clear the old scene's UI in the same update as its source, before the loading effect runs.
+    selectedRef.current = null;
+    targetedRef.current = null;
+    restoreFocusTarget.current = null;
+    detailWasOpen.current = false;
+    setSelected(null);
+    setTargeted(null);
+    setHotspotLabelPosition(null);
+    setPhase("loading");
+    setSceneVisible(false);
     const url = new URL(window.location.href);
     if (next.kind === "url") url.searchParams.set(SCENE_PARAM, next.url);
     else url.searchParams.delete(SCENE_PARAM);
@@ -344,15 +356,16 @@ export default function SplatScene() {
           const width = container!.clientWidth;
           const height = container!.clientHeight;
           const index = selectedRef.current;
+          const hotspot = index === null ? undefined : sceneHotspots[index];
           const card = container!.parentElement?.querySelector<HTMLElement>(".detail-card");
-          if (!objectScene || width >= 640 || index === null || !card) {
+          if (!objectScene || width >= 640 || !hotspot || !card) {
             if (camera.view?.enabled) camera.clearViewOffset();
             return;
           }
           const header = container!.parentElement?.querySelector<HTMLElement>(".scene-header");
           const top = (header ? header.offsetTop + header.offsetHeight : 0) + 16;
           const bottom = Math.max(top, card.offsetTop - 16);
-          const offset = sceneHotspots[index].framing?.mobileOffset ?? [0, 0];
+          const offset = hotspot.framing?.mobileOffset ?? [0, 0];
           const offsetY = Math.max(-offset[1] * height, height / 2 - (top + bottom) / 2);
           camera.setViewOffset(width, height, -offset[0] * width, offsetY, width, height);
         };
@@ -591,7 +604,7 @@ export default function SplatScene() {
     <div className="scene-atmosphere pointer-events-none absolute inset-0" aria-hidden="true" />
     <header className="scene-header pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4">
       <div className="scene-title-panel rounded-lg bg-canvas">
-        <h1 className="scene-heading font-medium">Splat Walk<span className="scene-name text-subtle">/ {sceneName}</span></h1>
+        <h1 className="scene-heading font-medium">Splat Walk<span className="scene-name text-subtle" title={sceneName}>/ {sceneName}</span></h1>
         <div className="scene-title-meta">
           <p className="scene-tagline text-subtle">A captured world, up close.</p>
           {phase === "ready" && hotspots.length > 0 && <p
@@ -640,14 +653,14 @@ export default function SplatScene() {
 
     {phase === "ready" && <>
       {!objectMode && locked && <div className="pointer-events-none absolute inset-0 grid place-items-center" aria-hidden="true"><span className="scene-crosshair" /></div>}
-      {targeted !== null && selected === null && (!objectMode || hotspotLabelPosition?.index === targeted) && <div
+      {targeted !== null && targetedHotspot && selected === null && (!objectMode || hotspotLabelPosition?.index === targeted) && <div
         className={`hotspot-label pointer-events-none absolute ${visited.has(targeted) ? "is-visited" : ""}`}
         style={targetedLabelStyle}
         data-hotspot-label
         data-hotspot-index={targeted}
         role="status"
       >
-        <span>{hotspots[targeted].label}</span>
+        <span>{targetedHotspot.label}</span>
         <small>{visited.has(targeted) ? "Found" : "Inspect"}</small>
       </div>}
       {selected === null && <div id="scan-controls" className={`scan-hint hint pointer-events-none absolute mx-auto rounded-lg bg-panel text-center text-sm text-subtle ${hint || (!objectMode && lockError) ? "opacity-100" : "opacity-0"}`} aria-hidden={!hint && (objectMode || !lockError)}>
@@ -660,7 +673,7 @@ export default function SplatScene() {
         </>}
         {!objectMode && lockError && <p className="mt-2 text-ink">Mouse capture was unavailable. Drag to look, or try Explore again.</p>}
       </div>}
-      {selected !== null && <section
+      {selected !== null && selectedHotspot && <section
         aria-labelledby="hotspot-title"
         role="dialog"
         aria-modal="false"
@@ -670,10 +683,10 @@ export default function SplatScene() {
       >
         <span className="detail-sheet-handle" aria-hidden="true" />
         <div className="flex items-start justify-between gap-3">
-          <h2 id="hotspot-title" className="detail-title font-medium">{hotspots[selected].label}</h2>
+          <h2 id="hotspot-title" className="detail-title font-medium">{selectedHotspot.label}</h2>
           <button ref={cardClose} className="hud-button detail-close" onClick={() => closeCard()} aria-label="Close detail">Close</button>
         </div>
-        <p className="detail-copy text-subtle">{hotspots[selected].description}</p>
+        <p className="detail-copy text-subtle">{selectedHotspot.description}</p>
         {objectMode && <div className="mt-4 flex items-center justify-between gap-2 border-t border-line/50 pt-3" aria-label="Guided detail navigation">
           <button
             className="hud-button min-h-9 px-3 py-1 text-xs"
@@ -749,8 +762,8 @@ export default function SplatScene() {
     </div>}
     <footer className="scene-footer pointer-events-none absolute text-xs text-subtle">
       <p className="tech-label rounded bg-canvas px-2 py-1">three.js r186 native WebGPU splats</p>
-      <p className="attribution pointer-events-auto rounded bg-canvas px-2 py-1">
-        {custom ? <>Scan: {sceneName}</> : <>
+      <p className={`attribution pointer-events-auto rounded bg-canvas px-2 py-1 ${custom ? "custom-attribution" : ""}`}>
+        {custom ? <span className="scan-attribution-name" title={sceneName}>Scan: {sceneName}</span> : <>
           Lion: <a className="underline" href="https://superspl.at/scene/56155c3f" target="_blank" rel="noreferrer">Renaud / Joanna Kobierska</a>
           <span aria-hidden="true"> · </span><a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>
         </>}

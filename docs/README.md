@@ -4,8 +4,9 @@ This directory is the working context for Splat Walk. The root `README.md` descr
 
 ## Current truth
 
-- Production remains on the previously released free-flight behavior until PR #6 is merged, deployed and verified live.
-- PR #6 (`feat/object-camera-exhibit-2026-09-15`) implements the accepted subject-centered object-camera direction for the cave lion.
+- PR #6 released the accepted subject-centered object-camera direction for the cave lion.
+- PRs #7 and #8 released custom `.spz` file/drop/link loading and automatic framing.
+- PR #9 hardens source transitions, malformed filenames and responsive controls; `STATUS.md` links its exact-source evidence and production release record.
 - The existing free-flight controller remains available as explicit `environment` mode.
 - The renderer remains three.js r186 native WebGPU `GaussianSplat` + `SPZLoader`.
 - The sample remains `public/scenes/lion.v3.spz` with the existing dark museum/exhibition HUD.
@@ -45,7 +46,7 @@ PR #6 follows the documented architecture rather than turning one controller int
 - `lib/scene.config.ts` owns explicit scene mode, object overview/constraints, tuning and hotspot camera poses;
 - `components/SplatScene.tsx` selects the controller and coordinates discovery/tour UI while preserving the proven renderer/loading/recovery path.
 
-Optional idle orbit, decorative initial settle, arbitrary surface focus and panning remain deferred. They are not required for the current candidate.
+Optional idle orbit, decorative initial settle, arbitrary surface focus and panning remain deferred. They are not required for the released showcase or custom-scan hardening.
 
 ## Documentation discipline
 
@@ -56,5 +57,5 @@ For any further object-camera source change:
 - update `docs/CONTEXT-MAP.md` when module/file ownership changes;
 - record material design deviations in `docs/DECISIONS.md` instead of silently changing the spec;
 - add new exact-build QA evidence under a dated `design/reference/` directory rather than rewriting historical evidence;
-- rerun `npm run check` after source changes;
+- run `npm run check` and the applicable `npm run test:e2e` browser regressions after source changes;
 - merge only after the rendered visual/input checks in `docs/QA-ACCEPTANCE.md` pass.
