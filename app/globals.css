@@ -35,15 +35,16 @@ canvas { display: block; touch-action: none; }
 
 .scene-header { padding: clamp(1.25rem, 2.5vw, 2rem); }
 .scene-title-panel {
+  min-width: 0;
   padding: .72rem .88rem;
   border: 1px solid var(--hud-border);
   background: rgb(10 14 11 / 54%);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
   backdrop-filter: blur(16px) saturate(112%);
 }
-.scene-heading { font-size: clamp(1.18rem, 1.8vw, 1.42rem); line-height: 1.3; letter-spacing: -.025em; }
-.scene-name { margin-left: .7rem; font-weight: 400; letter-spacing: -.018em; }
-.scene-tagline { margin-top: .28rem; font-size: .82rem; letter-spacing: .006em; }
+.scene-heading { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(1.18rem, 1.8vw, 1.42rem); line-height: 1.3; letter-spacing: -.025em; }
+.scene-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: .7rem; font-weight: 400; letter-spacing: -.018em; }
+.scene-tagline { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: .28rem; font-size: .82rem; letter-spacing: .006em; }
 .scene-title-meta { display: flex; align-items: baseline; justify-content: space-between; gap: .9rem; }
 .discovery-progress {
   margin-top: .28rem;
@@ -53,7 +54,7 @@ canvas { display: block; touch-action: none; }
   white-space: nowrap;
 }
 .discovery-progress.is-complete { color: var(--color-accent); }
-.scene-actions { animation: hud-rise-in 420ms cubic-bezier(.2,.8,.2,1) both; }
+.scene-actions { flex-shrink: 0; animation: hud-rise-in 420ms cubic-bezier(.2,.8,.2,1) both; }
 
 .hud-button {
   min-height: 42px;
@@ -172,6 +173,9 @@ canvas { display: block; touch-action: none; }
 }
 .tech-label { display: none; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; letter-spacing: .015em; }
 .attribution { max-width: none; text-align: center; white-space: normal; line-height: 1.35; }
+.custom-attribution { display: flex; align-items: baseline; gap: .25rem; min-width: 0; max-width: min(100%, 18rem); }
+.scan-attribution-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.custom-attribution > :not(.scan-attribution-name) { flex-shrink: 0; }
 .attribution a { text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .source-link { color: var(--color-accent); text-decoration: none; }
 
@@ -279,6 +283,7 @@ canvas { display: block; touch-action: none; }
   .scene-footer { left: auto; right: 1rem; bottom: .8rem; width: auto; justify-content: flex-end; font-size: .64rem; }
   .tech-label { display: none; }
   .attribution { max-width: none; white-space: nowrap; }
+  .custom-attribution { max-width: 18rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

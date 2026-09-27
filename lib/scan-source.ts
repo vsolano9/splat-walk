@@ -18,7 +18,13 @@ export function readSceneParam(location: Location): ScanSource | null {
   try { url = new URL(value, location.href); } catch { return null; }
   if (url.protocol !== "https:" && url.origin !== location.origin) return null;
   const file = url.pathname.split("/").filter(Boolean).pop();
-  return { kind: "url", url: url.href, name: file ? decodeURIComponent(file) : url.host };
+  let name = file ?? url.host;
+  if (file) {
+    try { name = decodeURIComponent(file); } catch {
+      // A malformed escape must not crash rendering. Keep the literal name; loading can still retry.
+    }
+  }
+  return { kind: "url", url: url.href, name };
 }
 
 // Samples at most this many splats; enough for stable percentiles on multi-million-splat captures.
