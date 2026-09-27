@@ -128,6 +128,10 @@ Exercised in Chrome with the native WebGPU backend on a local dev server, with n
 
 [PR #9](https://github.com/vsolano9/splat-walk/pull/9) fixes source-switch crashes while a lion detail is open, malformed URL-filename decoding, and long names pushing mobile controls off-screen. The full filename remains available in DOM text and title attributes while visual labels truncate to fit. All 14 browser regressions passed on the production build of code commit `c9dcdeca1a694de9cd6561dbd001faa11e1f24e0`; see the [scoped evidence record](docs/evidence/custom-scan-hardening-2026-09-27.md). The PR release comment records deployment identity and post-merge public-site verification.
 
+### Safari Simulator
+
+[PR #10](https://github.com/vsolano9/splat-walk/pull/10) records an iPhone 17 Pro Simulator and iPad Pro 11-inch (M5) Simulator pass on iOS 26.5 / Safari 26.5. Production loaded without horizontal overflow and correctly showed **WebGPU unavailable** because Apple Simulator exposed `navigator.gpu` but returned no usable adapter. Malformed and very long linked filenames kept the Safari page shell intact. Simulator cannot qualify splat rendering, orbit, pinch, hotspots or ready-state custom scans; see the [scoped record](docs/evidence/safari-simulator-2026-09-27.md).
+
 ### Historical free-flight evidence
 
 The Phase 4–6 and final-hardening records below predate the object-camera iteration. They remain evidence for the renderer/recovery stack and the earlier free-flight behavior only:

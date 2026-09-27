@@ -1,12 +1,14 @@
 # Splat Walk documentation
 
-This directory is the working context for Splat Walk. The root `README.md` describes the behavior represented by the branch it is read from; `docs/STATUS.md` distinguishes production from an in-flight candidate.
+This directory is the working context for Splat Walk. The root `README.md` describes the current behavior; `docs/STATUS.md` is the canonical release/completion record.
 
 ## Current truth
 
+- The accepted showcase scope is complete; there is no active release candidate or known release blocker.
 - PR #6 released the accepted subject-centered object-camera direction for the cave lion.
 - PRs #7 and #8 released custom `.spz` file/drop/link loading and automatic framing.
 - PR #9 hardens source transitions, malformed filenames and responsive controls; `STATUS.md` links its exact-source evidence and production release record.
+- PR #10 records Safari Simulator fallback-shell qualification and the simulator's WebGPU limitation; it does not substitute for hardware Safari/WebGPU testing.
 - The existing free-flight controller remains available as explicit `environment` mode.
 - The renderer remains three.js r186 native WebGPU `GaussianSplat` + `SPZLoader`.
 - The sample remains `public/scenes/lion.v3.spz` with the existing dark museum/exhibition HUD.
@@ -15,7 +17,7 @@ This directory is the working context for Splat Walk. The root `README.md` descr
 
 Read these documents in order:
 
-1. [`STATUS.md`](STATUS.md) — production/candidate state and current gate.
+1. [`STATUS.md`](STATUS.md) — final release status, verification record and non-blocking coverage limits.
 2. [`PRODUCT-DIRECTION.md`](PRODUCT-DIRECTION.md) — product intent, experience principles, scope, and non-goals.
 3. [`CAMERA-INTERACTION-SPEC.md`](CAMERA-INTERACTION-SPEC.md) — canonical object-camera behavior and control mapping.
 4. [`HOTSPOTS-TOUR-SPEC.md`](HOTSPOTS-TOUR-SPEC.md) — guided hotspot camera poses, transitions, and completion behavior.

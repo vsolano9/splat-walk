@@ -2,6 +2,8 @@
 
 Last updated: 2026-09-27
 
+**Project status: complete for the accepted Splat Walk showcase scope.** There are no known release blockers, open implementation items or open pull requests. Remaining notes below are coverage boundaries or explicit non-goals, not unfinished release work. See the [final closeout record](evidence/final-closeout-2026-09-27.md).
+
 ## Production
 
 PRs #6 (object-camera exhibit), #7 (custom scans) and #8 (narrow-field-of-view framing) are merged. The object-camera release has a **GO** record at `design/reference/2026-09-15-object-camera-qa/qa.md`.
@@ -75,8 +77,10 @@ The [Safari Simulator qualification](evidence/safari-simulator-2026-09-27.md) ex
 
 Apple Simulator cannot provide the WebGPU feature level Splat Walk requires, so this pass cannot qualify splat rendering, orbit, pinch, hotspot/tour or ready-state custom scans. It is fallback-shell coverage only.
 
-## Open coverage gaps
+## Non-blocking coverage limits
 
-- hardware Safari/WebGPU and real touch gestures remain unqualified for the current object-camera/custom-scan release; the simulator cannot replace this because WebGPU is unsupported there;
-- Android hardware remains unqualified;
-- environment mode is not offered for custom scans (object mode only).
+- hardware Safari/WebGPU and real touch gestures are not qualified for the current object-camera/custom-scan release; Apple Simulator cannot replace this because WebGPU is unsupported there;
+- Android hardware is not qualified;
+- custom scans intentionally use object mode only; optional environment-mode selection for arbitrary custom captures is outside the accepted showcase scope.
+
+These limits do not block the current release. Reopen the project only for a concrete defect, a deliberate new feature, or a requested hardware-coverage pass.
