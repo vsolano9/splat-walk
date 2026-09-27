@@ -48,6 +48,14 @@ The bundled lion uses **object mode**:
 - Reduced motion removes nonessential camera interpolation. **Reload capture** after an error retains discoveries; a full page refresh starts a new discovery session.
 - **Controls** toggles the four-second interaction hint.
 
+### Open another scan
+
+- **Open scan** in the header, or dropping an `.spz` file anywhere on the page, replaces the lion with that capture. The file stays in the browser; nothing is uploaded.
+- `?scene=<url>` loads a capture by link, for example `/?scene=https://example.com/room.spz`. Only HTTPS or same-origin URLs are used, and the host must allow CORS. Anything else falls back to the lion.
+- Other captures open in object mode, framed automatically: the camera targets the middle of the splat cloud, trimmed by 2% on each side of every axis to ignore stray floaters, and backs off until that trimmed volume fits the view. The lion's rings, tour and discovery counter are hidden, since their annotations only fit the lion.
+- Captures get the same X half-turn as the lion (`SCAN_ROTATION`). That orientation also displayed Spark's public `butterfly.spz` correctly.
+- **Back to the lion** returns to the bundled sample and starts a new discovery session. Unreadable files and unreachable URLs show the error card with that same option.
+
 `SCENE_MODE = "environment"` preserves the original walkthrough controls: pointer-lock Explore, WASD movement, Q/E height, mouse/arrow look, drag-to-look, and split move/look touch controls.
 
 ### Safari notes
@@ -56,7 +64,9 @@ The Safari pointer-lock note applies only to **environment mode**. In the record
 
 For keyboard navigation on macOS, enable **Keyboard navigation** in System Settings > Keyboard. Safari Settings > Advanced > **Press Tab to highlight each item on a webpage** controls Tab/Option-Tab behavior for clickable items. See [Apple's keyboard navigation guidance](https://support.apple.com/guide/safari/keyboard-shortcuts-and-gestures-cpsh003/mac). The dock uses native buttons; no browser or system preferences are changed by the app.
 
-## Use your own scan
+## Bundle your own scan
+
+To preview a capture, use **Open scan** or `?scene=` above. To ship one with authored framing and annotations instead of the lion:
 
 1. Capture Gaussian splats with **Scaniverse** or **Polycam**, not a textured mesh export.
 2. Clean in **SuperSplat 3.0**: crop, remove floaters and unnecessary background, and keep the scene at a sensible object/room scale.
@@ -79,7 +89,7 @@ During development, `window.__splatWalk` in the page's main-world console report
 - `lib/controls.ts`: the preserved `createFlyControls()` environment controller for pointer-lock mouse, keyboard and two-zone touch input, plus the small shared `SceneControls` contract.
 - `lib/scene.config.ts`: scene mode, scan URL/transforms, object and environment camera tuning, and annotations with authored camera poses.
 - `app/globals.css`: Tailwind v4 and the dark museum/exhibition HUD palette.
-- `lib/three-addons.d.ts`: source-matched declarations for the two new addons. The installed runtime is r186; current `@types/three` is still r185.4. Remove these declarations when DefinitelyTyped includes the addons.
+- `lib/scan-source.ts`: the bundled/URL/file scan source type, `?scene=` parsing, and the automatic object framing for non-bundled captures.
 
 The scan remains the visual treatment. Object mode keeps a stable subject target and derives camera position from yaw, pitch and radius with delta-time-aware damping. Hotspot selection changes the desired object-camera pose without blocking direct manipulation. Environment mode keeps the prior free-flight behavior.
 
@@ -95,17 +105,18 @@ The canonical public URL is `https://splat-walk.vercel.app`. Open Graph and Twit
 
 ## Verification
 
-### Object-camera candidate
+### Object camera
 
-The object-camera implementation is tracked in PR #6. The post-review full release check passed at `a65a7ffdf3ee67f01cbc2c41551a92a67e0ec028`, which contains application source `2db6cf376323631276aa2ed9cea4577f2eae0d68` plus a temporary preview-only Vercel build override:
+The object-camera release (PR #6) has a rendered **GO** verdict covering desktop input, tour, responsive and reduced-motion paths, background/return, GPU-loss and HTTP-failure recovery in native WebGPU Chromium. Touch was CDP-emulated; physical touch, Safari and physical iPhone were not rerun. See [the dated record](design/reference/2026-09-15-object-camera-qa/qa.md).
 
-- `tsc --noEmit` passed;
-- `eslint .` passed;
-- the Next.js 16.3.4 production build compiled and prerendered successfully on Vercel;
-- the preview route returned HTTP 200 and prerendered `data-scene-mode="object"`;
-- the temporary build override was removed immediately afterwards without changing application source.
+### Custom scans
 
-The camera/touch interaction changes still require an exact-candidate rendered input/visual pass before they should be treated as released evidence. Historical screenshots below are deliberately **not** reused as proof for the new controller. See [the dated candidate record](design/reference/2026-09-15-object-camera-qa/qa.md).
+Exercised in Chrome with the native WebGPU backend on a local dev server, with no application console errors:
+
+- A dropped copy of the lion loaded as a file and auto-framed to about the authored overview. Title, canvas label and attribution showed its file name. The rings, counter and tour were hidden. Mouse-drag orbit and wheel zoom moved the camera.
+- **Open scan** through the native file chooser, a same-origin `?scene=`, and Spark's public HTTPS `butterfly.spz` (4.0 MB) all loaded and framed correctly.
+- Error cases showed the error card with **Back to the lion**: a non-SPZ file ("invalid gzip data"), a same-origin 404, and a cross-origin URL without CORS. An `http:` cross-origin `?scene=` was ignored and loaded the lion.
+- The lion's dock, Next and Escape flow still worked after returning to it. The 320×568 layout was checked with both the lion and a custom scan.
 
 ### Historical free-flight evidence
 

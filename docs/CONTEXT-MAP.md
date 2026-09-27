@@ -35,15 +35,16 @@ Owns runtime integration:
 - GPU loss handling and retry teardown;
 - canvas creation/accessibility labeling;
 - responsive projection sizing;
-- one-request SPZ fetch with streamed progress;
+- scan source selection: bundled lion, `?scene=` URL or an opened/dropped file (drop overlay, Open scan, Back to the lion);
+- one-request SPZ fetch (or local file stream) with streamed progress;
 - `SPZLoader` parse and `GaussianSplat` construction;
-- scan rotation and marker attachment;
+- scan rotation and marker attachment; auto-framed object profile and depth range for non-bundled captures;
 - scene-mode controller selection;
 - native splat + marker raycasting;
 - selected/targeted/visited discovery state;
 - hotspot camera-focus dispatch;
 - projected object-mode hotspot labels;
-- guided Previous/Next and completion UI;
+- guided Previous/Next and completion UI (bundled lion only; other captures have no hotspots);
 - marker billboard/pulse/visited state;
 - render loop, visibility pause/resume and cleanup.
 
@@ -63,7 +64,8 @@ Dedicated object-mode controller added by PR #6:
 - two-finger pinch zoom;
 - keyboard arrow orbit, `+`/`-` zoom and Home reset;
 - overview reset;
-- authored hotspot focus poses;
+- hotspot focus poses from the caller-supplied hotspot list;
+- overview and limits from the caller-supplied `ObjectCameraProfile` (authored `OBJECT_CAMERA` for the lion, `fitObjectProfile()` for other captures);
 - reduced-motion snap behavior;
 - pointer/listener/pointer-capture cleanup.
 
@@ -124,9 +126,9 @@ Thin page wrapper around `SplatScene` plus Escape handling for open detail UI. U
 
 Metadata/canonical/Open Graph/Twitter/icon ownership. PR #6 updates the description from free movement to guided orbit/zoom inspection.
 
-### `lib/three-addons.d.ts`
+### `lib/scan-source.ts`
 
-Local declarations bridging the current `@types/three` gap for native Gaussian splat addons. Unrelated to camera work.
+`ScanSource` (bundled / url / file), `?scene=` parsing (HTTPS or same-origin only) and `fitObjectProfile()`, which frames a loaded capture from 2–98th percentile bounds of up to 40,000 sampled splat centers. The former `lib/three-addons.d.ts` shim was removed once `@types/three` 0.186 shipped the splat addon types.
 
 ## Public assets
 

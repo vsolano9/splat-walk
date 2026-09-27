@@ -6,7 +6,7 @@ import globals from "globals";
 
 export default [
   {
-    ignores: [".next/**", "out/**", "build/**", "next-env.d.ts", "design/reference/**"],
+    ignores: [".next/**", "out/**", "build/**", "next-env.d.ts", "design/reference/**", "_receipts/**"],
   },
   {
     files: ["**/*.{js,mjs,cjs,ts,tsx}"],

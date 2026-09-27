@@ -1,10 +1,10 @@
 # Status
 
-Last updated: 2026-09-15
+Last updated: 2026-09-27
 
 ## Production
 
-Production `main` is still the previously released free-flight build until PR #6 is merged and the resulting production deployment is verified.
+Production `main` serves the object-camera exhibit (PR #6, merge `dd34078`). Its rendered QA verdict is **GO**; see `design/reference/2026-09-15-object-camera-qa/qa.md`.
 
 The renderer/recovery baseline remains proven by the historical records under `design/reference/`:
 
@@ -18,11 +18,9 @@ The renderer/recovery baseline remains proven by the historical records under `d
 - session-only discoveries and accessible DOM HUD;
 - responsive layout and resource cleanup.
 
-## Object-camera candidate
+## Object camera (released in PR #6)
 
-PR #6, branch `feat/object-camera-exhibit-2026-09-15`, implements the accepted interaction direction documented in this directory.
-
-Implemented on the candidate:
+Implemented:
 
 - explicit `object` vs `environment` scene modes;
 - cave lion configured as `object` mode;
@@ -50,40 +48,16 @@ Not implemented because they remain optional polish rather than ship requirement
 
 The hotspot config retains optional framing metadata for later visual tuning, but the current controller uses authored target/yaw/pitch/radius poses only.
 
-## Verification state
+## Custom scans (branch `feat/custom-scans`)
 
-Completed:
+- **Open scan** button, whole-page `.spz` drop and `?scene=<https-or-same-origin-url>` load any SPZ capture client-side;
+- non-bundled captures run in object mode with an automatic profile from `fitObjectProfile()` (`lib/scan-source.ts`), a scaled camera depth range, and no lion hotspots/tour/counter;
+- file/URL-specific errors (unreadable SPZ, unreachable/CORS, HTTP status) with **Back to the lion**;
+- `@types/three` 0.186 replaces the local `lib/three-addons.d.ts` shim; `three` 0.186.1.
 
-- Vercel production-style preview builds compile on Next.js 16.3.4;
-- the post-review full `npm run check` passed at `a65a7ffdf3ee67f01cbc2c41551a92a67e0ec028`, which is source commit `2db6cf376323631276aa2ed9cea4577f2eae0d68` plus a temporary preview-only build override:
-  - `tsc --noEmit`;
-  - `eslint .`;
-  - `next build` and static prerender;
-- the temporary override was removed in `3161e331c8dd6ee99ef7b519a945865d3d029baf` without changing application source;
-- preview route returned HTTP 200;
-- prerendered output exposed `data-scene-mode="object"`;
-- review confirmed that the single-fetch loader, GPU-loss path, native raycasting, render-loop ownership and cleanup architecture were not broadly rewritten.
+Verified in native WebGPU Chrome on a local dev server (see README "Custom scans"). Not physically tested on touch hardware or Safari.
 
-Still required before merge/release under the project UI gate:
+## Open coverage gaps
 
-- rendered WebGPU visual review of the exact candidate;
-- real orbit/wheel interaction pass on desktop;
-- touch orbit + pinch pass on a real/coarse-pointer surface where available;
-- visual confirmation that all three authored hotspot poses keep the described feature unobscured by the detail UI;
-- responsive confirmation at desktop and narrow portrait minimum;
-- final production/live verification after merge.
-
-The Work/OMP local browser bridge became unavailable during this implementation session, and the isolated fallback Chromium could not reach external network. None of those rendered-input checks are being invented or inferred from old screenshots. Historical free-flight evidence is not proof for the object controller.
-
-## Branch / PR
-
-- Repository: `vsolano9/splat-walk`
-- Base: `main` at `a237a5c27540edd5001d1ba2631950fa2e41a247`
-- Feature branch: `feat/object-camera-exhibit-2026-09-15`
-- Pull request: #6
-- Merge state: not merged while the rendered UI gate remains outstanding
-- Production state: unchanged until merge/deploy/live verification
-
-## Next gate
-
-Run `docs/QA-ACCEPTANCE.md` against the exact PR #6 candidate with an actual rendered browser/device surface. Fix only concrete defects found there, rerun `npm run check` if source changes, then merge and verify `https://splat-walk.vercel.app`.
+- physical touch, Safari and Android/tablet for the object camera and custom scans;
+- environment mode is not offered for custom scans (object mode only).

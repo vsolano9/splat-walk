@@ -196,6 +196,7 @@ canvas { display: block; touch-action: none; }
   box-shadow: 0 0 0 1px rgb(0 0 0 / 24%), 0 0 18px rgb(220 235 177 / 16%);
 }
 .scene-crosshair::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: var(--color-accent); }
+.drop-overlay { border: 2px dashed var(--color-accent); background: rgb(17 20 17 / 62%); backdrop-filter: blur(6px); }
 
 @keyframes load-sweep { from { transform: translateX(-120%); } to { transform: translateX(360%); } }
 @keyframes loading-in { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }

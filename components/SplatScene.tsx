@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three/webgpu";
 import { GaussianSplat } from "three/addons/objects/GaussianSplat.js";
 import { SPZLoader } from "three/addons/loaders/SPZLoader.js";
 import { createFlyControls, type SceneControls } from "@/lib/controls";
 import { createObjectControls } from "@/lib/object-controls";
-import { HOTSPOTS, HOTSPOT_RADIUS, LOOK_AT, MARKER_SIZE, SCAN_ROTATION, SCENE_MODE, SPAWN_POSITION, SPZ_URL } from "@/lib/scene.config";
+import { HOTSPOTS, HOTSPOT_RADIUS, LOOK_AT, MARKER_SIZE, OBJECT_CAMERA, SCAN_ROTATION, SCENE_MODE, SPAWN_POSITION, SPZ_URL, type Hotspot } from "@/lib/scene.config";
+import { SCENE_PARAM, fitObjectProfile, readSceneParam, type ScanSource } from "@/lib/scan-source";
 
 type Phase = "loading" | "ready" | "unsupported" | "unavailable" | "error";
 type HotspotLabelPosition = { index: number; x: number; y: number };
 
-const objectMode = SCENE_MODE === "object";
+const NO_HOTSPOTS: readonly Hotspot[] = [];
+// The query string never changes behind React's back: openScan() also records the choice in state.
+const subscribeNever = () => () => {};
 
 export default function SplatScene() {
   const host = useRef<HTMLDivElement>(null);
@@ -37,8 +40,62 @@ export default function SplatScene() {
   const [attempt, setAttempt] = useState(0);
   const [lockError, setLockError] = useState(false);
   const [completionDismissed, setCompletionDismissed] = useState(false);
+  // `null` during prerender and hydration, so the server HTML and first client render match.
+  const search = useSyncExternalStore(subscribeNever, () => window.location.search, () => null);
+  const linkedSource = useMemo<ScanSource | null>(() => search === null ? null : readSceneParam(window.location) ?? { kind: "bundled" }, [search]);
+  const [chosenSource, setSource] = useState<ScanSource | null>(null);
+  const source = chosenSource ?? linkedSource;
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  // The authored lion tour only applies to the bundled sample; other captures are auto-framed objects.
+  const custom = source !== null && source.kind !== "bundled";
+  const hotspots = custom ? NO_HOTSPOTS : HOTSPOTS;
+  const objectMode = custom || SCENE_MODE === "object";
+  const sceneName = source && source.kind !== "bundled" ? source.name : "Cave lion";
   const controlsVisible = selected === null && (hint || (!objectMode && lockError));
-  const allFound = visited.size === HOTSPOTS.length;
+  const allFound = hotspots.length > 0 && visited.size === hotspots.length;
+
+  const openScan = (next: ScanSource) => {
+    const url = new URL(window.location.href);
+    if (next.kind === "url") url.searchParams.set(SCENE_PARAM, next.url);
+    else url.searchParams.delete(SCENE_PARAM);
+    window.history.replaceState(null, "", url);
+    visitedRef.current = new Set();
+    setVisited(visitedRef.current);
+    setCompletionDismissed(false);
+    setSource(next);
+  };
+  const openFile = (file: File | undefined) => {
+    if (file) openScan({ kind: "file", file, name: file.name });
+  };
+  const openFileRef = useRef(openFile);
+  useEffect(() => { openFileRef.current = openFile; });
+
+  // Dropping a capture anywhere on the page replaces the current scan.
+  useEffect(() => {
+    const carriesFiles = (event: DragEvent) => event.dataTransfer?.types.includes("Files") ?? false;
+    const over = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      event.dataTransfer!.dropEffect = "copy";
+      setDragging(true);
+    };
+    const leave = (event: DragEvent) => { if (!event.relatedTarget) setDragging(false); };
+    const drop = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      setDragging(false);
+      openFileRef.current(event.dataTransfer?.files[0]);
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
+  }, []);
 
   useEffect(() => {
     if (phase !== "ready" || !hint) return;
@@ -56,7 +113,12 @@ export default function SplatScene() {
 
   useEffect(() => {
     const container = host.current;
-    if (!container) return;
+    if (!container || !source) return;
+    const sceneSource = source;
+    const customScan = sceneSource.kind !== "bundled";
+    const sceneHotspots = customScan ? NO_HOTSPOTS : HOTSPOTS;
+    const objectScene = customScan || SCENE_MODE === "object";
+    const sceneLabel = sceneSource.kind === "bundled" ? "Cave lion" : sceneSource.name;
     let active = true;
     // Set by release(): a device that disappears because we tore it down is not a GPU fault.
     let disposed = false;
@@ -74,7 +136,7 @@ export default function SplatScene() {
     camera.lookAt(...LOOK_AT);
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
-    const positions = HOTSPOTS.map((hotspot) => new THREE.Vector3(...hotspot.position));
+    const positions = sceneHotspots.map((hotspot) => new THREE.Vector3(...hotspot.position));
     const projectedHotspot = new THREE.Vector3();
     const markerGeometry = new THREE.RingGeometry(0.55, 1, 40);
     const markerMaterials = positions.map(() => new THREE.MeshBasicMaterial({ color: "#dcebb1", side: THREE.DoubleSide, depthTest: false, transparent: true, opacity: 0.82, toneMapped: false }));
@@ -143,7 +205,7 @@ export default function SplatScene() {
         targetedRef.current = next;
         setTargeted(next);
       }
-      if (objectMode && next !== null) {
+      if (objectScene && next !== null) {
         setHotspotLabelPosition({
           index: next,
           x: Math.max(92, Math.min(bounds.width - 92, nearestX)),
@@ -272,25 +334,25 @@ export default function SplatScene() {
         }
         const canvas = renderer.domElement;
         canvas.tabIndex = 0;
-        canvas.setAttribute("aria-label", objectMode
-          ? "Cave lion 3D scan. Drag to orbit, scroll or pinch to zoom, arrow keys orbit, plus and minus zoom, and select a ring for details."
+        canvas.setAttribute("aria-label", `${sceneLabel} 3D scan. ${objectScene
+          ? `Drag to orbit, scroll or pinch to zoom, arrow keys orbit, plus and minus zoom${sceneHotspots.length ? ", and select a ring for details" : ""}.`
           : coarsePointer
-            ? "Cave lion 3D scan. Drag the left side to move, drag the right side to look, and tap a ring for details."
-            : "Cave lion 3D scan. WASD to move, Q and E for height, arrow keys or mouse to look. Press Escape to release the mouse.");
+            ? "Drag the left side to move, drag the right side to look, and tap a ring for details."
+            : "WASD to move, Q and E for height, arrow keys or mouse to look. Press Escape to release the mouse."}`);
         container!.appendChild(canvas);
         const reframe = () => {
           const width = container!.clientWidth;
           const height = container!.clientHeight;
           const index = selectedRef.current;
           const card = container!.parentElement?.querySelector<HTMLElement>(".detail-card");
-          if (!objectMode || width >= 640 || index === null || !card) {
+          if (!objectScene || width >= 640 || index === null || !card) {
             if (camera.view?.enabled) camera.clearViewOffset();
             return;
           }
           const header = container!.parentElement?.querySelector<HTMLElement>(".scene-header");
           const top = (header ? header.offsetTop + header.offsetHeight : 0) + 16;
           const bottom = Math.max(top, card.offsetTop - 16);
-          const offset = HOTSPOTS[index].framing?.mobileOffset ?? [0, 0];
+          const offset = sceneHotspots[index].framing?.mobileOffset ?? [0, 0];
           const offsetY = Math.max(-offset[1] * height, height / 2 - (top + bottom) / 2);
           camera.setViewOffset(width, height, -offset[0] * width, offsetY, width, height);
         };
@@ -310,20 +372,36 @@ export default function SplatScene() {
         resizeObserver.observe(container!);
         resize();
         setMessage("Streaming the capture…");
-        const response = await fetch(SPZ_URL, { signal: request.signal });
-        if (!active || disposed) return;
-        if (!response.ok) throw new Error(`The scan could not load (HTTP ${response.status}). Check SPZ_URL and try again.`);
-        // Progress needs Content-Length from this same response. A separate HEAD probe adds a
-        // second request without adding information: when the transfer is compressed neither
-        // response declares a length, and the bar then stays indeterminate.
-        const declaredBytes = Number(response.headers.get("content-length"));
-        const totalBytes = Number.isFinite(declaredBytes) && declaredBytes > 0 ? declaredBytes : null;
+        let body: ReadableStream<Uint8Array> | null;
+        let totalBytes: number | null;
+        let whole: (() => Promise<ArrayBuffer>) | undefined;
+        if (sceneSource.kind === "file") {
+          body = sceneSource.file.stream();
+          totalBytes = sceneSource.file.size || null;
+        } else {
+          let response: Response;
+          try {
+            response = await fetch(sceneSource.kind === "url" ? sceneSource.url : SPZ_URL, { signal: request.signal });
+          } catch (error) {
+            if (sceneSource.kind === "url" && !request.signal.aborted) throw new Error("The scan URL could not be reached. Check the address and that its host allows cross-origin (CORS) requests.");
+            throw error;
+          }
+          if (!active || disposed) return;
+          if (!response.ok) throw new Error(`The scan could not load (HTTP ${response.status}). ${sceneSource.kind === "url" ? "Check the scene URL" : "Check SPZ_URL"} and try again.`);
+          // Progress needs Content-Length from this same response. A separate HEAD probe adds a
+          // second request without adding information: when the transfer is compressed neither
+          // response declares a length, and the bar then stays indeterminate.
+          const declaredBytes = Number(response.headers.get("content-length"));
+          totalBytes = Number.isFinite(declaredBytes) && declaredBytes > 0 ? declaredBytes : null;
+          body = response.body;
+          whole = () => response.arrayBuffer();
+        }
         setLoadProgress(totalBytes ? 0 : null);
         let buffer: ArrayBuffer;
-        if (!response.body) {
-          buffer = await response.arrayBuffer();
+        if (!body) {
+          buffer = await whole!();
         } else {
-          const reader = response.body.getReader();
+          const reader = body.getReader();
           const chunks: Uint8Array[] = [];
           let received = 0;
           let reported = -1;
@@ -346,12 +424,22 @@ export default function SplatScene() {
         if (!active || disposed) return;
         setLoadProgress(100);
         setMessage("Building the splats…");
-        geometry = await new SPZLoader().parse(buffer);
-        if (!active || disposed) { geometry.dispose(); return; }
-        if (!geometry.getAttribute("position")?.count) throw new Error("This scan is empty. Choose a non-empty SPZ capture.");
+        geometry = await Promise.resolve(buffer).then((bytes) => new SPZLoader().parse(bytes)).catch((error: unknown): never => {
+          if (!customScan) throw error;
+          throw new Error(`This file is not a readable SPZ capture${error instanceof Error ? ` (${error.message.replace(/^THREE\.SPZLoader: /, "")})` : ""}. Export .spz from SuperSplat, Scaniverse or Polycam.`);
+        });
+        if (!active || disposed) { geometry?.dispose(); return; }
+        if (!geometry?.getAttribute("position")?.count) throw new Error("This scan is empty. Choose a non-empty SPZ capture.");
         splats = new GaussianSplat(geometry);
         splats.rotation.set(...SCAN_ROTATION);
         scene.add(splats, ...markers);
+        const profile = customScan ? fitObjectProfile(splats) : OBJECT_CAMERA;
+        if (customScan) {
+          // Scale the depth range with the capture so room-sized and tiny scans both avoid clipping.
+          camera.near = profile.radius * 0.004;
+          camera.far = profile.radius * 25;
+          camera.updateProjectionMatrix();
+        }
         const sharedOptions = {
           camera,
           canvas,
@@ -361,8 +449,8 @@ export default function SplatScene() {
           onResetChange: setResetting,
           reduceMotion,
         };
-        sceneControls = objectMode
-          ? createObjectControls(sharedOptions)
+        sceneControls = objectScene
+          ? createObjectControls({ ...sharedOptions, profile, hotspots: sceneHotspots })
           : createFlyControls({
               ...sharedOptions,
               onLock: setLocked,
@@ -375,7 +463,7 @@ export default function SplatScene() {
           const delta = Math.min((time - previousTime) / 1000, 0.05);
           previousTime = time;
           sceneControls?.update(delta);
-          if (!objectMode && document.pointerLockElement === canvas) updateTarget(0, 0, true, false);
+          if (!objectScene && document.pointerLockElement === canvas) updateTarget(0, 0, true, false);
           markers.forEach((marker, index) => {
             marker.quaternion.copy(camera.quaternion);
             const activeMarker = selectedRef.current === index;
@@ -400,7 +488,9 @@ export default function SplatScene() {
           Object.defineProperty(window, "__splatWalk", { configurable: true, get: () => ({
             revision: THREE.REVISION,
             backend: "WebGPU",
-            sceneMode: SCENE_MODE,
+            sceneMode: objectScene ? "object" : "environment",
+            source: sceneSource.kind,
+            profile,
             camera: camera.position.toArray(),
             rotation: camera.rotation.toArray(),
             splatCount: geometry?.getAttribute("position").count,
@@ -434,7 +524,7 @@ export default function SplatScene() {
       release();
       if (process.env.NODE_ENV === "development") Reflect.deleteProperty(window, "__splatWalk");
     };
-  }, [attempt]);
+  }, [attempt, source]);
 
   const closeCard = (focusTarget: HTMLElement | null = restoreFocusTarget.current) => {
     selectedRef.current = null;
@@ -492,7 +582,7 @@ export default function SplatScene() {
       ref={host}
       className={`scene-surface absolute inset-0 ${sceneVisible ? "scene-visible" : ""}`}
       data-phase={phase}
-      data-scene-mode={SCENE_MODE}
+      data-scene-mode={objectMode ? "object" : "environment"}
       data-resetting={resetting || undefined}
       onKeyDown={(event) => {
         if (objectMode && event.code === "Home" && event.target instanceof HTMLCanvasElement) closeCard(event.target);
@@ -501,15 +591,15 @@ export default function SplatScene() {
     <div className="scene-atmosphere pointer-events-none absolute inset-0" aria-hidden="true" />
     <header className="scene-header pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4">
       <div className="scene-title-panel rounded-lg bg-canvas">
-        <h1 className="scene-heading font-medium">Splat Walk<span className="scene-name text-subtle">/ Cave lion</span></h1>
+        <h1 className="scene-heading font-medium">Splat Walk<span className="scene-name text-subtle">/ {sceneName}</span></h1>
         <div className="scene-title-meta">
           <p className="scene-tagline text-subtle">A captured world, up close.</p>
-          {phase === "ready" && <p
+          {phase === "ready" && hotspots.length > 0 && <p
             className={`discovery-progress ${allFound ? "is-complete" : ""}`}
             data-discovery-progress
             data-all-found={allFound || undefined}
             aria-live="polite"
-          >{visited.size} / {HOTSPOTS.length} found</p>}
+          >{visited.size} / {hotspots.length} found</p>}
         </div>
       </div>
       {phase === "ready" && <div className="scene-actions pointer-events-auto flex gap-2">
@@ -522,6 +612,7 @@ export default function SplatScene() {
             closeCard(host.current?.querySelector("canvas") ?? null);
           }}
         >{resetting ? "Returning…" : objectMode ? "Overview" : "Reset view"}</button>
+        <button className="hud-button" onClick={() => fileInput.current?.click()}>Open scan</button>
         {!objectMode && <button className="hud-button desktop-explore primary-action" onClick={() => {
           closeCard(host.current?.querySelector("canvas") ?? null);
           setLockError(false);
@@ -540,7 +631,10 @@ export default function SplatScene() {
           </div>
           <p className="mt-2 text-xs text-subtle" aria-hidden="true">{loadProgress === null ? "Connecting to capture" : `${loadProgress}% loaded`}</p>
         </div>}
-        {phase !== "loading" && <button className="hud-button mt-4 border border-line" onClick={() => setAttempt((value) => value + 1)}>Reload capture</button>}
+        {phase !== "loading" && <div className="mt-4 flex flex-wrap gap-2">
+          <button className="hud-button border border-line" onClick={() => setAttempt((value) => value + 1)}>Reload capture</button>
+          {custom && <button className="hud-button border border-line" onClick={() => openScan({ kind: "bundled" })}>Back to the lion</button>}
+        </div>}
       </section>
     </div>}
 
@@ -553,13 +647,13 @@ export default function SplatScene() {
         data-hotspot-index={targeted}
         role="status"
       >
-        <span>{HOTSPOTS[targeted].label}</span>
+        <span>{hotspots[targeted].label}</span>
         <small>{visited.has(targeted) ? "Found" : "Inspect"}</small>
       </div>}
       {selected === null && <div id="scan-controls" className={`scan-hint hint pointer-events-none absolute mx-auto rounded-lg bg-panel text-center text-sm text-subtle ${hint || (!objectMode && lockError) ? "opacity-100" : "opacity-0"}`} aria-hidden={!hint && (objectMode || !lockError)}>
         {objectMode ? <>
-          <p className="desktop-hint">Drag to orbit · Scroll to zoom<br />Hover a ring to reveal it · Click to inspect</p>
-          <p className="touch-hint">Drag to orbit · Pinch to zoom<br />Move near a ring to reveal it · Tap to inspect</p>
+          <p className="desktop-hint">Drag to orbit · Scroll to zoom<br />{hotspots.length ? "Hover a ring to reveal it · Click to inspect" : "Drop an .spz file anywhere to open it"}</p>
+          <p className="touch-hint">Drag to orbit · Pinch to zoom{hotspots.length > 0 && <><br />Move near a ring to reveal it · Tap to inspect</>}</p>
         </> : <>
           <p className="desktop-hint">Click to explore · WASD move · Q/E height<br />Mouse or arrows look · Esc releases · Aim at a ring for its label</p>
           <p className="touch-hint">Drag left to move · Drag right to look<br />Move near a ring to reveal it · Tap to discover</p>
@@ -576,19 +670,19 @@ export default function SplatScene() {
       >
         <span className="detail-sheet-handle" aria-hidden="true" />
         <div className="flex items-start justify-between gap-3">
-          <h2 id="hotspot-title" className="detail-title font-medium">{HOTSPOTS[selected].label}</h2>
+          <h2 id="hotspot-title" className="detail-title font-medium">{hotspots[selected].label}</h2>
           <button ref={cardClose} className="hud-button detail-close" onClick={() => closeCard()} aria-label="Close detail">Close</button>
         </div>
-        <p className="detail-copy text-subtle">{HOTSPOTS[selected].description}</p>
+        <p className="detail-copy text-subtle">{hotspots[selected].description}</p>
         {objectMode && <div className="mt-4 flex items-center justify-between gap-2 border-t border-line/50 pt-3" aria-label="Guided detail navigation">
           <button
             className="hud-button min-h-9 px-3 py-1 text-xs"
-            onClick={() => moveTour((selected - 1 + HOTSPOTS.length) % HOTSPOTS.length)}
+            onClick={() => moveTour((selected - 1 + hotspots.length) % hotspots.length)}
           >Previous</button>
-          <span className="text-xs tabular-nums text-subtle">{selected + 1} of {HOTSPOTS.length}</span>
+          <span className="text-xs tabular-nums text-subtle">{selected + 1} of {hotspots.length}</span>
           <button
             className="hud-button min-h-9 px-3 py-1 text-xs"
-            onClick={() => moveTour((selected + 1) % HOTSPOTS.length)}
+            onClick={() => moveTour((selected + 1) % hotspots.length)}
           >Next</button>
         </div>}
       </section>}
@@ -607,7 +701,7 @@ export default function SplatScene() {
         </div>
       </section>}
       <nav aria-label="Scan details" className="detail-nav absolute">
-        {HOTSPOTS.map((hotspot, index) => {
+        {hotspots.map((hotspot, index) => {
           const isVisited = visited.has(index);
           return <button
             key={hotspot.label}
@@ -636,13 +730,30 @@ export default function SplatScene() {
             setHint(!controlsVisible);
           }}
         >Controls</button>
+        {custom && <button className="hud-button detail-button text-sm" onClick={() => openScan({ kind: "bundled" })}>Back to the lion</button>}
       </nav>
     </>}
+    <input
+      ref={fileInput}
+      type="file"
+      className="sr-only"
+      tabIndex={-1}
+      aria-hidden="true"
+      onChange={(event) => {
+        openFile(event.currentTarget.files?.[0]);
+        event.currentTarget.value = "";
+      }}
+    />
+    {dragging && <div className="drop-overlay pointer-events-none absolute inset-0 z-30 grid place-items-center" aria-hidden="true">
+      <p className="rounded-xl bg-panel px-5 py-4 text-base">Drop an .spz capture to open it</p>
+    </div>}
     <footer className="scene-footer pointer-events-none absolute text-xs text-subtle">
       <p className="tech-label rounded bg-canvas px-2 py-1">three.js r186 native WebGPU splats</p>
       <p className="attribution pointer-events-auto rounded bg-canvas px-2 py-1">
-        Lion: <a className="underline" href="https://superspl.at/scene/56155c3f" target="_blank" rel="noreferrer">Renaud / Joanna Kobierska</a>
-        <span aria-hidden="true"> · </span><a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>
+        {custom ? <>Scan: {sceneName}</> : <>
+          Lion: <a className="underline" href="https://superspl.at/scene/56155c3f" target="_blank" rel="noreferrer">Renaud / Joanna Kobierska</a>
+          <span aria-hidden="true"> · </span><a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>
+        </>}
         <span aria-hidden="true"> · </span><a className="source-link" href="https://github.com/vsolano9/splat-walk" target="_blank" rel="noreferrer">Source ↗</a>
       </p>
     </footer>
